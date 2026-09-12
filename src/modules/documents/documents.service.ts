@@ -6,7 +6,7 @@ import {
   ForbiddenError,
   BadRequestError,
 } from '../../common/errors/AppError.js';
-import { CoAStatus } from '@prisma/client';
+import { CoAStatus, Role } from '@prisma/client';
 import { AuditService } from '../audit/audit.service.js';
 
 export const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads', 'coas');
@@ -102,26 +102,62 @@ export class DocumentsService {
     return coa;
   }
 
-  public static async getCoAMetadata(batchId: string) {
+  public static async getCoAMetadata(
+    batchId: string,
+    user?: { role: Role; companyId: string }
+  ) {
     const coa = await prisma.certificateOfAnalysis.findUnique({
       where: { batchId },
+      include: {
+        batch: {
+          include: { listings: true },
+        },
+      },
     });
 
     if (!coa) {
       throw new NotFoundError(`No Certificate of Analysis found for Batch '${batchId}'.`);
     }
 
+    if (user && user.role !== Role.ADMIN) {
+      if (user.role === Role.SELLER && coa.batch.sellerId !== user.companyId) {
+        throw new ForbiddenError('You do not have permission to view certificate metadata for another seller’s batch.');
+      }
+    }
+
     return coa;
   }
 
-  public static async getCoAFilePath(batchId: string): Promise<{ filePath: string; originalName: string }> {
+  public static async getCoAFilePath(
+    batchId: string,
+    user?: { role: Role; companyId: string }
+  ): Promise<{ filePath: string; originalName: string }> {
     const coa = await prisma.certificateOfAnalysis.findUnique({
       where: { batchId },
-      include: { batch: true },
+      include: {
+        batch: {
+          include: { listings: true },
+        },
+      },
     });
 
     if (!coa) {
       throw new NotFoundError(`No Certificate of Analysis found for Batch '${batchId}'.`);
+    }
+
+    // Access control: enforce seller ownership and buyer listing visibility
+    if (user && user.role !== Role.ADMIN) {
+      if (user.role === Role.SELLER && coa.batch.sellerId !== user.companyId) {
+        throw new ForbiddenError('You do not have permission to view or download certificates for another seller’s batch.');
+      }
+      if (user.role === Role.BUYER) {
+        const isListed = coa.batch.listings.some(
+          (l) => l.status === 'ACTIVE' || l.status === 'PENDING_DEAL' || l.status === 'SOLD'
+        );
+        if (!isListed && coa.batch.sellerId !== user.companyId) {
+          throw new ForbiddenError('You do not have permission to access certificates for unlisted batches.');
+        }
+      }
     }
 
     // Locate matching file in uploads dir

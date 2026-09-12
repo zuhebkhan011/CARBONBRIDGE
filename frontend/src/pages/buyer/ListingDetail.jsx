@@ -22,6 +22,7 @@ export function ListingDetail() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [purchaseSuccess, setPurchaseSuccess] = useState(null);
+  const [viewingPdf, setViewingPdf] = useState(false);
 
   // Fixed Price Purchase State
   const [purchaseQty, setPurchaseQty] = useState(1);
@@ -72,6 +73,18 @@ export function ListingDetail() {
       if (user.company.longitude != null) setDeliveryLng(Number(user.company.longitude));
     }
   }, [user]);
+
+  const handleViewPdf = async (batchId) => {
+    setViewingPdf(true);
+    try {
+      await documentsApi.viewCoA(batchId);
+    } catch (err) {
+      console.error('Failed to view PDF:', err);
+      alert(err.message || 'Unable to load certificate. Authentication required.');
+    } finally {
+      setViewingPdf(false);
+    }
+  };
 
   // Handle Fixed-Price Purchase
   const handlePurchase = async () => {
@@ -481,14 +494,14 @@ export function ListingDetail() {
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
                     Original Document: {listing.batch.certificate.originalName || 'Certificate_of_Analysis.pdf'}
                   </span>
-                  <a
-                    href={documentsApi.downloadUrl(listing.batch.id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => handleViewPdf(listing.batch.id)}
                     className="btn btn-secondary btn-sm"
+                    disabled={viewingPdf}
                   >
-                    View Original PDF
-                  </a>
+                    {viewingPdf ? 'Opening PDF...' : 'View Original PDF'}
+                  </button>
                 </div>
               </div>
             ) : (

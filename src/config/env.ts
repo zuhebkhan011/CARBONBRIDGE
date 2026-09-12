@@ -18,7 +18,7 @@ const envSchema = z.object({
   CRYO_TRANSIT_ESTIMATE_KM_PER_HOUR: z.coerce.number().default(45),
   ML_SERVICE_URL: z.string().default('http://localhost:8000'),
   GEMINI_API_KEY: z.string().optional().default(''),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
 });
 
 const parsed = envSchema.safeParse(process.env);

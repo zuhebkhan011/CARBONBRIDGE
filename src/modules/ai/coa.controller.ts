@@ -18,9 +18,10 @@ export class CoaController {
       const user = (req as any).user;
       const isAdmin = user.role === Role.ADMIN;
       const companyId = user.companyId;
-      const actorUserId = user.id;
+      const actorUserId = user.userId || user.id;
+      const forceRetry = req.body?.force === true || req.query?.force === 'true';
 
-      const result = await CoaService.analyzeBatchCoA(batchId, companyId, actorUserId, isAdmin);
+      const result = await CoaService.analyzeBatchCoA(batchId, companyId, actorUserId, isAdmin, forceRetry);
 
       res.status(200).json({
         success: true,

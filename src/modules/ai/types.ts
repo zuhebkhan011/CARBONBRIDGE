@@ -178,5 +178,17 @@ export interface CoaAnalysisResponse {
   disclaimer: string;
   latencyMs?: number;
   extractedAt: string;
+  co2PurityPercent?: number | null;
+  moisturePercent?: number | null;
+  testDate?: string | null;
+  batchReference?: string | null;
+  laboratoryName?: string | null;
+  qualityParameters?: CoaQualityParameter[];
+  contaminants?: CoaContaminant[];
+  hasDiscrepancy?: boolean;
+  batchReferenceMatch?: boolean | null;
+  purityMatch?: boolean | null;
+  purityDifference?: number | null;
+  crossCheckSummary?: string | null;
 }
 

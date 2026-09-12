@@ -32,7 +32,8 @@ export class DocumentsController {
 
   public static async getCoAMetadata(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await DocumentsService.getCoAMetadata(req.params.batchId);
+      const user = (req as any).user;
+      const result = await DocumentsService.getCoAMetadata(req.params.batchId, user);
       res.status(200).json({
         success: true,
         data: result,
@@ -44,7 +45,8 @@ export class DocumentsController {
 
   public static async downloadCoA(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { filePath, originalName } = await DocumentsService.getCoAFilePath(req.params.batchId);
+      const user = (req as any).user;
+      const { filePath, originalName } = await DocumentsService.getCoAFilePath(req.params.batchId, user);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
       res.sendFile(filePath);

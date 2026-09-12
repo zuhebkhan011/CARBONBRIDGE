@@ -88,6 +88,40 @@ export const api = {
   patch: (endpoint, body) => request(endpoint, { method: 'PATCH', body }),
   delete: (endpoint) => request(endpoint, { method: 'DELETE' }),
   upload: (endpoint, formData) => request(endpoint, { method: 'POST', body: formData }),
+  getBlob: async (endpoint) => {
+    const token = sessionStorage.getItem('cb_token');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'GET',
+        headers,
+      });
+    } catch (err) {
+      console.error('[NETWORK ERROR - BLOB]', {
+        url: `${API_BASE}${endpoint}`,
+        error: err,
+      });
+      throw new ApiError('Network error downloading document.', 0, null, 'GET', `${API_BASE}${endpoint}`);
+    }
+
+    if (!response.ok) {
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      const errorMessage = data?.error?.message || data?.message || 'Failed to download document';
+      throw new ApiError(errorMessage, response.status, data, 'GET', `${API_BASE}${endpoint}`);
+    }
+
+    return await response.blob();
+  },
 };
 
 export { ApiError };

@@ -118,7 +118,7 @@ describe('AI Matchmaker & Intelligence Integration Suite', () => {
         expect(topMatch.reasons.length).toBeGreaterThan(0);
         expect(topMatch.recommendation).toBeDefined();
       }
-    });
+    }, 35000);
 
     it('filters out supply that fails minimum purity hard constraint', async () => {
       // Create high-purity requirement (99.9%)

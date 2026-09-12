@@ -1,58 +1,141 @@
 import { z } from 'zod';
 import fs from 'fs';
-import { GeminiService } from './gemini.service.js';
+import { GeminiService, GeminiErrorCategory } from './gemini.service.js';
 import { CoaExtractionData } from './types.js';
 import { logger } from '../../common/logging/logger.js';
+import { config } from '../../config/env.js';
+
+const contaminantItemSchema = z.union([
+  z.string().transform((str) => {
+    const parts = str.split(':');
+    if (parts.length > 1) {
+      return {
+        name: parts[0].trim(),
+        value: parts.slice(1).join(':').trim(),
+      };
+    }
+    return { name: str.trim(), value: 'detected' };
+  }),
+  z.object({
+    name: z.string(),
+    value: z.union([z.string(), z.number()]).default(''),
+    unit: z.string().nullable().optional(),
+    sourceText: z.string().nullable().optional(),
+  }),
+]);
+
+const qualityParameterItemSchema = z.union([
+  z.string().transform((str) => {
+    const parts = str.split(':');
+    if (parts.length > 1) {
+      return {
+        name: parts[0].trim(),
+        value: parts.slice(1).join(':').trim(),
+      };
+    }
+    return { name: str.trim(), value: str.trim() };
+  }),
+  z.object({
+    name: z.string(),
+    value: z.union([z.string(), z.number(), z.null()]).transform((v) => (v == null ? 'N/A' : v)),
+    unit: z.string().nullable().optional(),
+    sourceText: z.string().nullable().optional(),
+    sourcePage: z.union([z.number(), z.string()]).transform((v) => (typeof v === 'string' ? parseInt(v, 10) || null : v)).nullable().optional(),
+    status: z.string().nullable().optional(),
+    specification: z.string().nullable().optional(),
+  }),
+]);
 
 export const coaExtractionSchema = z.object({
   documentType: z.string().default('COA'),
-  co2PurityPercent: z.number().min(0).max(100).nullable(),
-  moisturePercent: z.number().min(0).max(100).nullable(),
-  testDate: z.string().nullable(),
-  batchReference: z.string().nullable(),
-  laboratoryName: z.string().nullable(),
+  co2PurityPercent: z
+    .union([z.number(), z.string()])
+    .nullable()
+    .optional()
+    .transform((val) => {
+      if (val == null) return null;
+      if (typeof val === 'number') return val;
+      const cleaned = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+      return isNaN(cleaned) ? null : cleaned;
+    })
+    .pipe(z.number().min(0).max(100).nullable()),
+  moisturePercent: z
+    .union([z.number(), z.string()])
+    .nullable()
+    .optional()
+    .transform((val) => {
+      if (val == null) return null;
+      if (typeof val === 'number') return val;
+      const cleaned = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+      return isNaN(cleaned) ? null : cleaned;
+    })
+    .pipe(z.number().min(0).max(100).nullable()),
+  testDate: z.string().nullable().optional(),
+  batchReference: z.union([z.string(), z.number()]).transform((v) => (v == null ? null : String(v))).nullable().optional(),
+  laboratoryName: z.string().nullable().optional(),
   contaminants: z
-    .array(
-      z.object({
-        name: z.string(),
-        value: z.union([z.string(), z.number()]),
-        unit: z.string().nullable().optional(),
-        sourceText: z.string().nullable().optional(),
-      })
-    )
+    .union([z.array(contaminantItemSchema), z.null(), z.undefined()])
+    .transform((val) => val || [])
     .default([]),
   qualityParameters: z
-    .array(
-      z.object({
-        name: z.string(),
-        value: z.union([z.string(), z.number()]),
-        unit: z.string().nullable().optional(),
-        sourceText: z.string().nullable().optional(),
-        sourcePage: z.number().nullable().optional(),
-      })
-    )
+    .union([z.array(qualityParameterItemSchema), z.null(), z.undefined()])
+    .transform((val) => val || [])
     .default([]),
-  extractionNotes: z.array(z.string()).default([]),
-  missingFields: z.array(z.string()).default([]),
-  warnings: z.array(z.string()).default([]),
+  extractionNotes: z
+    .union([z.array(z.string()), z.null(), z.undefined()])
+    .transform((val) => val || [])
+    .default([]),
+  missingFields: z
+    .union([z.array(z.string()), z.null(), z.undefined()])
+    .transform((val) => val || [])
+    .default([]),
+  warnings: z
+    .union([z.array(z.string()), z.null(), z.undefined()])
+    .transform((val) => val || [])
+    .default([]),
   provenance: z.record(z.any()).optional(),
 });
+
+export interface CoaExtractionResult {
+  success: boolean;
+  data: CoaExtractionData | null;
+  latencyMs: number;
+  model: string;
+  errorCategory?: GeminiErrorCategory;
+  errorMessage?: string;
+}
 
 export class CoaExtractionService {
   /**
    * Reads a CoA PDF document from disk and extracts structured quality parameters via Gemini multimodal API.
    * Enforces non-fabrication: missing fields are strictly returned as null.
-   * Returns null if Gemini is unconfigured or if processing fails.
+   * Provides detailed error categorization and performance telemetry.
    */
-  public static async extractFromPdf(filePath: string): Promise<{ data: CoaExtractionData; latencyMs: number } | null> {
+  public static async extractFromPdf(filePath: string): Promise<CoaExtractionResult> {
+    const configuredModel = config.GEMINI_MODEL || 'gemini-3.5-flash';
+
     if (!fs.existsSync(filePath)) {
       logger.warn({ filePath }, 'CoA file does not exist on disk.');
-      return null;
+      return {
+        success: false,
+        data: null,
+        latencyMs: 0,
+        model: configuredModel,
+        errorCategory: 'PDF processing error',
+        errorMessage: 'Original CoA file could not be found on disk.',
+      };
     }
 
     if (!GeminiService.isConfigured()) {
       logger.info('Gemini is not configured. CoA AI extraction unavailable; original PDF is preserved.');
-      return null;
+      return {
+        success: false,
+        data: null,
+        latencyMs: 0,
+        model: configuredModel,
+        errorCategory: 'missing API key',
+        errorMessage: 'Gemini API key is not configured in environment.',
+      };
     }
 
     const startTime = Date.now();
@@ -76,14 +159,14 @@ CRITICAL INTEGRITY RULES:
 6. testDate: YYYY-MM-DD string if explicitly stated, or null.
 7. batchReference: exact lot/batch ID as written on document, or null.
 8. laboratoryName: analytical laboratory or issuing entity name, or null.
-9. contaminants: array of detected or measured impurities (e.g., CO, NOx, SOx, Hydrocarbons, Benzene, etc.).
-10. qualityParameters: array of all analytical parameters listed with { name, value, unit, sourceText, sourcePage }.
+9. contaminants: array of objects with { name: string, value: string | number, unit?: string } (e.g., [{"name": "Moisture", "value": "8.5 ppm", "unit": "ppm"}]).
+10. qualityParameters: array of all analytical parameters listed with { name: string, value: string | number, unit?: string, sourceText?: string }.
 11. missingFields: list of standard CoA parameters not found in this document (e.g., ["moisture", "testDate"]).
 12. warnings: list of any document discrepancies, ambiguities, or abnormal readings.`;
 
       const userPrompt = `Analyze this Certificate of Analysis (CoA) PDF document and extract all quality parameters, purity, moisture, batch reference, test date, and laboratory details according to the schema. Output JSON only.`;
 
-      const parsed = await GeminiService.generateJson<CoaExtractionData>({
+      const geminiResult = await GeminiService.generateJsonDetailed<CoaExtractionData>({
         systemPrompt,
         userPrompt,
         inlineData: {
@@ -91,21 +174,38 @@ CRITICAL INTEGRITY RULES:
           data: base64Pdf,
         },
         temperature: 0.0,
-        timeoutMs: 12000,
+        timeoutMs: 25000,
       });
 
       const latencyMs = Date.now() - startTime;
 
-      if (!parsed) {
-        logger.warn({ latencyMs }, 'Gemini returned empty or invalid response for CoA PDF extraction.');
-        return null;
+      if (!geminiResult.success || !geminiResult.data) {
+        logger.warn(
+          { latencyMs, errorCategory: geminiResult.errorCategory, model: geminiResult.model },
+          'Gemini returned empty or error response for CoA PDF extraction.'
+        );
+        return {
+          success: false,
+          data: null,
+          latencyMs,
+          model: geminiResult.model,
+          errorCategory: geminiResult.errorCategory || 'other API error',
+          errorMessage: geminiResult.errorMessage || 'AI CoA extraction could not be completed.',
+        };
       }
 
       // Validate with strict Zod schema
-      const validation = coaExtractionSchema.safeParse(parsed);
+      const validation = coaExtractionSchema.safeParse(geminiResult.data);
       if (!validation.success) {
         logger.warn({ errors: validation.error.format() }, 'CoA extraction failed Zod schema validation.');
-        return null;
+        return {
+          success: false,
+          data: null,
+          latencyMs,
+          model: geminiResult.model,
+          errorCategory: 'invalid structured response',
+          errorMessage: 'Extracted certificate data failed schema validation.',
+        };
       }
 
       const validatedData = validation.data;
@@ -116,6 +216,12 @@ CRITICAL INTEGRITY RULES:
         const match = validatedData.testDate.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
         if (match) {
           normalizedDate = match[0];
+        } else {
+          // If in DD-Mon-YYYY format (e.g. 12-Sep-2026), parse to ISO
+          const d = new Date(validatedData.testDate);
+          if (!isNaN(d.getTime())) {
+            normalizedDate = d.toISOString().split('T')[0];
+          }
         }
       }
 
@@ -141,15 +247,20 @@ CRITICAL INTEGRITY RULES:
         documentType: validatedData.documentType || 'COA',
         co2PurityPercent: validatedData.co2PurityPercent ?? null,
         moisturePercent: validatedData.moisturePercent ?? null,
-        testDate: normalizedDate,
-        batchReference: validatedData.batchReference ? validatedData.batchReference.trim() : null,
-        laboratoryName: validatedData.laboratoryName ? validatedData.laboratoryName.trim() : null,
-        contaminants: validatedData.contaminants || [],
-        qualityParameters: validatedData.qualityParameters || [],
+        testDate: normalizedDate || validatedData.testDate || null,
+        batchReference: validatedData.batchReference || null,
+        laboratoryName: validatedData.laboratoryName || null,
+        contaminants: validatedData.contaminants as any,
+        qualityParameters: validatedData.qualityParameters as any,
         extractionNotes: validatedData.extractionNotes || [],
         missingFields: missingList,
         warnings: validatedData.warnings || [],
-        provenance: validatedData.provenance || {},
+        provenance: {
+          extractedAt: new Date().toISOString(),
+          model: geminiResult.model,
+          latencyMs,
+          ...validatedData.provenance,
+        },
       };
 
       logger.info(
@@ -158,15 +269,28 @@ CRITICAL INTEGRITY RULES:
           hasPurity: finalData.co2PurityPercent != null,
           hasBatchRef: finalData.batchReference != null,
           qualityParamsCount: finalData.qualityParameters.length,
+          model: geminiResult.model,
         },
         'CoA document extraction completed successfully.'
       );
 
-      return { data: finalData, latencyMs };
+      return {
+        success: true,
+        data: finalData,
+        latencyMs,
+        model: geminiResult.model,
+      };
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
-      logger.warn({ latencyMs, error: err.message }, 'Failed to extract CoA parameters from PDF.');
-      return null;
+      logger.error({ err: err.message, latencyMs }, 'Unexpected error extracting CoA from PDF.');
+      return {
+        success: false,
+        data: null,
+        latencyMs,
+        model: configuredModel,
+        errorCategory: 'other API error',
+        errorMessage: err.message,
+      };
     }
   }
 }

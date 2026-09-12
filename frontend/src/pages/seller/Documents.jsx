@@ -9,6 +9,7 @@ export function Documents() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState('');
   const [analyzingBatchId, setAnalyzingBatchId] = useState('');
+  const [viewingPdfBatchId, setViewingPdfBatchId] = useState('');
   const [activeAnalysisBatch, setActiveAnalysisBatch] = useState(null);
   const [activeExtraction, setActiveExtraction] = useState(null);
   const [loadingExtraction, setLoadingExtraction] = useState(false);
@@ -16,6 +17,30 @@ export function Documents() {
   const [actionSuccess, setActionSuccess] = useState('');
   const fileInputRef = useRef(null);
   const [selectedBatch, setSelectedBatch] = useState('');
+
+  const normalizeExtraction = (data) => {
+    if (!data) return null;
+    const ext = data.extraction || {};
+    const cross = data.crossCheck || {};
+    return {
+      ...data,
+      ...ext,
+      ...cross,
+      status: data.status || ext.status,
+      co2PurityPercent: data.co2PurityPercent ?? ext.co2PurityPercent ?? null,
+      moisturePercent: data.moisturePercent ?? ext.moisturePercent ?? null,
+      testDate: data.testDate ?? ext.testDate ?? null,
+      batchReference: data.batchReference ?? ext.batchReference ?? null,
+      laboratoryName: data.laboratoryName ?? ext.laboratoryName ?? null,
+      qualityParameters: data.qualityParameters || ext.qualityParameters || [],
+      contaminants: data.contaminants || ext.contaminants || [],
+      hasDiscrepancy: data.hasDiscrepancy ?? cross.hasDiscrepancy ?? false,
+      batchReferenceMatch: data.batchReferenceMatch ?? cross.batchReferenceMatch ?? null,
+      purityMatch: data.purityMatch ?? cross.purityMatch ?? null,
+      purityDifference: data.purityDifference ?? cross.purityDifference ?? null,
+      crossCheckSummary: data.crossCheckSummary || cross.summary || data.summary || null,
+    };
+  };
 
   const loadBatches = async () => {
     try {
@@ -56,22 +81,50 @@ export function Documents() {
     }
   };
 
-  const handleRunAiAnalysis = async (batchId) => {
+  const handleViewPdf = async (batchId) => {
+    setViewingPdfBatchId(batchId);
+    setActionError('');
+    try {
+      await documentsApi.viewCoA(batchId);
+    } catch (err) {
+      console.error('Failed to view PDF:', err);
+      setActionError(err.message || 'Failed to view original PDF. Authentication required.');
+    } finally {
+      setViewingPdfBatchId('');
+    }
+  };
+
+  const handleRunAiAnalysis = async (batchId, isRetry = false) => {
+    if (analyzingBatchId) return; // Prevent duplicate clicks while processing
     setAnalyzingBatchId(batchId);
     setActionError('');
     setActionSuccess('');
     try {
-      const res = await aiApi.extractCoA(batchId);
+      const res = await aiApi.extractCoA(batchId, isRetry);
       const data = res?.data || res;
-      setActionSuccess('CoA AI analysis completed successfully.');
-      await loadBatches();
-      // If modal is open for this batch, update it
-      if (activeAnalysisBatch?.id === batchId) {
-        setActiveExtraction(data?.extraction || data);
+      
+      const normalized = normalizeExtraction(data);
+
+      if (normalized?.status === 'FAILED') {
+        setActionError(normalized.crossCheckSummary || 'AI CoA analysis could not be completed.');
+        if (activeAnalysisBatch?.id === batchId) {
+          setActiveExtraction(normalized);
+        }
+      } else if (normalized?.status === 'PROCESSING') {
+        setActionSuccess('CoA analysis is currently processing. Please wait a moment.');
+        if (activeAnalysisBatch?.id === batchId) {
+          setActiveExtraction(normalized);
+        }
+      } else {
+        setActionSuccess('CoA AI analysis completed successfully.');
+        if (activeAnalysisBatch?.id === batchId) {
+          setActiveExtraction(normalized);
+        }
       }
+      await loadBatches();
     } catch (err) {
       console.error('AI CoA analysis failed:', err);
-      setActionError(err.message || 'AI extraction failed or is temporarily unavailable. Original document remains accessible.');
+      setActionError(err.message || 'AI CoA analysis could not be completed.');
       await loadBatches();
     } finally {
       setAnalyzingBatchId('');
@@ -83,20 +136,24 @@ export function Documents() {
     setActionError('');
     setActionSuccess('');
     
-    // Check if extraction is already in batch.certificate
-    if (batch.certificate?.extraction) {
-      setActiveExtraction(batch.certificate.extraction);
-      return;
-    }
-
     setLoadingExtraction(true);
     try {
       const res = await aiApi.getCoAExtraction(batch.id);
       const data = res?.data || res;
-      setActiveExtraction(data?.extraction || data);
+      if (data) {
+        setActiveExtraction(normalizeExtraction(data));
+      } else if (batch.certificate?.extraction) {
+        setActiveExtraction(normalizeExtraction(batch.certificate.extraction));
+      } else {
+        setActiveExtraction(null);
+      }
     } catch (err) {
       console.error('Failed to fetch CoA extraction:', err);
-      setActiveExtraction(null);
+      if (batch.certificate?.extraction) {
+        setActiveExtraction(normalizeExtraction(batch.certificate.extraction));
+      } else {
+        setActiveExtraction(null);
+      }
     } finally {
       setLoadingExtraction(false);
     }
@@ -118,7 +175,7 @@ export function Documents() {
         ref={fileInputRef}
         style={{ display: 'none' }}
         onChange={handleFileChange}
-        accept=".pdf,.jpg,.png"
+        accept=".pdf"
       />
 
       {actionError && (
@@ -158,6 +215,7 @@ export function Documents() {
                 const cert = b.certificate;
                 const extraction = cert?.extraction;
                 const isAnalyzing = analyzingBatchId === b.id;
+                const isViewing = viewingPdfBatchId === b.id;
 
                 return (
                   <tr key={b.id}>
@@ -175,15 +233,15 @@ export function Documents() {
                       {cert ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                           <span className="badge badge-success">Uploaded</span>
-                          <a
-                            href={documentsApi.downloadUrl(b.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => handleViewPdf(b.id)}
                             className="btn btn-ghost btn-xs"
-                            title="Download original file"
+                            title="View original PDF document in new tab"
+                            disabled={isViewing}
                           >
-                            PDF
-                          </a>
+                            {isViewing ? 'Opening...' : 'PDF'}
+                          </button>
                         </div>
                       ) : (
                         <span className="badge badge-neutral">Missing</span>
@@ -191,7 +249,7 @@ export function Documents() {
                     </td>
                     <td>
                       {isAnalyzing ? (
-                        <span className="badge badge-info">Analyzing CoA...</span>
+                        <span className="badge badge-info">Analyzing certificate...</span>
                       ) : extraction ? (
                         extraction.hasDiscrepancy ? (
                           <span
@@ -226,19 +284,31 @@ export function Documents() {
                         {cert ? (
                           <>
                             {extraction ? (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleViewAnalysis(b)}
-                              >
-                                View AI Summary
-                              </button>
+                              <>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => handleViewAnalysis(b)}
+                                >
+                                  {extraction.status === 'FAILED' ? 'View AI Summary' : 'View Details'}
+                                </button>
+                                {extraction.status === 'FAILED' && (
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => handleRunAiAnalysis(b.id, true)}
+                                    disabled={Boolean(analyzingBatchId)}
+                                    title="Retry AI CoA analysis"
+                                  >
+                                    {isAnalyzing ? 'Analyzing certificate...' : 'Try Again'}
+                                  </button>
+                                )}
+                              </>
                             ) : (
                               <button
                                 className="btn btn-primary btn-sm"
                                 onClick={() => handleRunAiAnalysis(b.id)}
-                                disabled={isAnalyzing}
+                                disabled={Boolean(analyzingBatchId)}
                               >
-                                {isAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
+                                {isAnalyzing ? 'Analyzing certificate...' : 'Run CoA AI Analysis'}
                               </button>
                             )}
                             <button
@@ -269,7 +339,7 @@ export function Documents() {
         </div>
       )}
 
-      {/* AI Document Summary Modal / Drawer */}
+      {/* AI Document Summary Modal */}
       {activeAnalysisBatch && (
         <div
           style={{
@@ -287,7 +357,7 @@ export function Documents() {
           <div
             className="card"
             style={{
-              maxWidth: '720px',
+              maxWidth: '740px',
               width: '100%',
               maxHeight: '90vh',
               overflowY: 'auto',
@@ -298,7 +368,7 @@ export function Documents() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                 <h3 style={{ margin: 0 }}>AI Document Summary</h3>
-                {activeExtraction && (
+                {activeExtraction && activeExtraction.status !== 'FAILED' && (
                   <span
                     className={`badge ${activeExtraction.hasDiscrepancy ? 'badge-warning' : 'badge-success'}`}
                     style={{ fontSize: 'var(--text-xs)' }}
@@ -332,25 +402,48 @@ export function Documents() {
               <div className="skeleton" style={{ height: '200px' }} />
             ) : !activeExtraction || activeExtraction.status === 'FAILED' ? (
               <div style={{ textAlign: 'center', padding: 'var(--space-6) 0' }}>
-                <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-                  No completed AI extraction available for this certificate.
-                </p>
+                <div
+                  style={{
+                    padding: 'var(--space-4)',
+                    background: activeExtraction?.status === 'FAILED' ? 'rgba(239, 68, 68, 0.08)' : 'var(--neutral-50)',
+                    border: activeExtraction?.status === 'FAILED' ? '1px solid var(--color-danger)' : '1px solid var(--neutral-150)',
+                    borderRadius: 'var(--radius-md)',
+                    color: activeExtraction?.status === 'FAILED' ? 'var(--color-danger)' : 'var(--color-text-muted)',
+                    marginBottom: 'var(--space-4)',
+                  }}
+                >
+                  <strong>
+                    {activeExtraction?.status === 'FAILED'
+                      ? 'AI CoA analysis could not be completed.'
+                      : 'No completed AI extraction available for this certificate.'}
+                  </strong>
+                  <p style={{ margin: 'var(--space-1) 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                    {activeExtraction?.status === 'FAILED'
+                      ? activeExtraction.crossCheckSummary || 'The AI extraction service encountered an issue or rate limit. The original PDF certificate remains securely stored and fully accessible.'
+                      : 'Run AI analysis on the uploaded certificate to extract purity, moisture, and quality parameters.'}
+                  </p>
+                </div>
                 <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center' }}>
                   <button
+                    type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleRunAiAnalysis(activeAnalysisBatch.id)}
-                    disabled={analyzingBatchId === activeAnalysisBatch.id}
+                    onClick={() => handleRunAiAnalysis(activeAnalysisBatch.id, activeExtraction?.status === 'FAILED')}
+                    disabled={Boolean(analyzingBatchId)}
                   >
-                    {analyzingBatchId === activeAnalysisBatch.id ? 'Analyzing...' : 'Run CoA AI Analysis'}
+                    {analyzingBatchId === activeAnalysisBatch.id
+                      ? 'Analyzing certificate...'
+                      : activeExtraction?.status === 'FAILED'
+                      ? 'Try Again'
+                      : 'Run CoA AI Analysis'}
                   </button>
-                  <a
-                    href={documentsApi.downloadUrl(activeAnalysisBatch.id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
                     className="btn btn-ghost btn-sm"
+                    onClick={() => handleViewPdf(activeAnalysisBatch.id)}
+                    disabled={viewingPdfBatchId === activeAnalysisBatch.id}
                   >
-                    View Original PDF
-                  </a>
+                    {viewingPdfBatchId === activeAnalysisBatch.id ? 'Opening PDF...' : 'View Original PDF'}
+                  </button>
                 </div>
               </div>
             ) : (
@@ -476,20 +569,21 @@ export function Documents() {
                     AI Model: {activeExtraction.modelName || 'Gemini Flash'} ({activeExtraction.latencyMs ? `${activeExtraction.latencyMs}ms` : 'completed'})
                   </div>
                   <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                    <a
-                      href={documentsApi.downloadUrl(activeAnalysisBatch.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary btn-sm"
-                    >
-                      View Original PDF
-                    </a>
                     <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleViewPdf(activeAnalysisBatch.id)}
+                      disabled={viewingPdfBatchId === activeAnalysisBatch.id}
+                    >
+                      {viewingPdfBatchId === activeAnalysisBatch.id ? 'Opening PDF...' : 'View Original PDF'}
+                    </button>
+                    <button
+                      type="button"
                       className="btn btn-primary btn-sm"
                       onClick={() => handleRunAiAnalysis(activeAnalysisBatch.id)}
-                      disabled={analyzingBatchId === activeAnalysisBatch.id}
+                      disabled={Boolean(analyzingBatchId)}
                     >
-                      {analyzingBatchId === activeAnalysisBatch.id ? 'Re-analyzing...' : 'Re-run Analysis'}
+                      {analyzingBatchId === activeAnalysisBatch.id ? 'Analyzing certificate...' : 'Re-run Analysis'}
                     </button>
                   </div>
                 </div>
@@ -501,4 +595,3 @@ export function Documents() {
     </div>
   );
 }
-
