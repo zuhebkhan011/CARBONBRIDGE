@@ -54,8 +54,21 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       UPLOAD_MAX_FILE_SIZE_MB: ${UPLOAD_MAX_FILE_SIZE_MB:-10}
       CRYO_FREIGHT_BASE_RATE_PER_KM: ${CRYO_FREIGHT_BASE_RATE_PER_KM:-1.85}
+      ML_SERVICE_URL: ${ML_SERVICE_URL:-http://ml-service:8000}
     ports:
       - '4000:4000'
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: carbonbridge-ml-service
+    restart: unless-stopped
+    expose:
+      - '8000'
+    environment:
+      ML_HOST: 0.0.0.0
+      ML_PORT: 8000
 
 volumes:
   postgres_data:

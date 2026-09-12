@@ -22,6 +22,8 @@ export function CreateListing() {
   const [batches, setBatches] = useState([]);
   const [batchesLoading, setBatchesLoading] = useState(true);
   const [advisoryPrice, setAdvisoryPrice] = useState(null);
+  const [mlPrice, setMlPrice] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
   const [form, setForm] = useState({
     batchId: '',
     quantity: '',
@@ -87,6 +89,15 @@ export function CreateListing() {
       pricingApi.getAdvisory({ purityPercentage: purity, batchQuantity: qty })
         .then(res => setAdvisoryPrice(res?.data || res))
         .catch(err => console.error('Advisory pricing error:', err));
+
+      setMlLoading(true);
+      pricingApi.getMlEstimate({ purityPercentage: purity, batchQuantity: qty, distanceKm: 50 })
+        .then(res => setMlPrice(res?.data || res))
+        .catch(err => {
+          console.error('ML pricing error:', err);
+          setMlPrice({ modelAvailable: false, reason: 'ML prediction unavailable — insufficient historical data.' });
+        })
+        .finally(() => setMlLoading(false));
     }
   }, [form.batchId, form.quantity, batches]);
 
@@ -343,6 +354,66 @@ export function CreateListing() {
                   <span>• Liquidity: +₹{advisoryPrice.breakdown?.supplyDemandAdjustment?.amount}</span>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ML Price Intelligence Section */}
+          {(mlPrice || mlLoading) && (
+            <div
+              className="card"
+              style={{
+                marginBottom: 'var(--space-4)',
+                background: 'rgba(59, 130, 246, 0.04)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: 'var(--radius-md, 8px)',
+                padding: 'var(--space-3) var(--space-4)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: '#2563eb', letterSpacing: '0.04em' }}>
+                    ML PRICE INTELLIGENCE
+                  </span>
+                  <span className="badge" style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>
+                    ML Prediction
+                  </span>
+                </div>
+                {mlPrice?.predictedPricePerTonne && mlPrice?.modelAvailable && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '11px', padding: '2px 8px', color: '#2563eb' }}
+                    onClick={() => {
+                      const targetField = listingType === 'FIXED' ? 'pricePerUnit' : 'reservePrice';
+                      setForm(prev => ({ ...prev, [targetField]: String(Math.round(mlPrice.predictedPricePerTonne)) }));
+                      setFieldErrors(prev => ({ ...prev, [targetField]: undefined }));
+                    }}
+                  >
+                    Apply ₹{Math.round(mlPrice.predictedPricePerTonne).toLocaleString()}/T
+                  </button>
+                )}
+              </div>
+
+              {mlLoading ? (
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 'var(--space-2) 0' }}>
+                  Computing XGBoost price inference...
+                </div>
+              ) : mlPrice?.modelAvailable && mlPrice?.predictedPricePerTonne ? (
+                <>
+                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 'var(--space-1) 0', color: 'var(--color-text-primary)' }}>
+                    Predicted price: <span style={{ color: '#2563eb' }}>₹{mlPrice.predictedPricePerTonne.toLocaleString()}</span> <span style={{ fontSize: 'var(--text-xs)', fontWeight: 400, color: 'var(--color-text-muted)' }}>/ Tonne</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                    {mlPrice.mae && <span>• Validation MAE: ±₹{mlPrice.mae}/T</span>}
+                    {mlPrice.r2 && <span>• Model R²: {mlPrice.r2}</span>}
+                    <span>• XGBoost Regression</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-1)' }}>
+                  ML prediction unavailable — insufficient historical data.
+                </div>
+              )}
             </div>
           )}
 

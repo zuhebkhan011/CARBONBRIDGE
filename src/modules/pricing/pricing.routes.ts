@@ -10,3 +10,7 @@ pricingRouter.get('/recommendation', PricingController.getAdvisoryPrice);
 pricingRouter.post('/recommendation', PricingController.getAdvisoryPrice);
 pricingRouter.get('/advisory', PricingController.getAdvisoryPrice);
 pricingRouter.post('/advisory', PricingController.getAdvisoryPrice);
+
+pricingRouter.get('/ml-estimate', PricingController.getMlPriceEstimate);
+pricingRouter.get('/ml/:listingId', PricingController.getMlPriceForListing);
+

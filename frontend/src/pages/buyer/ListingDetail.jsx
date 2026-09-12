@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { listingsApi } from '../../api/listings';
 import { ordersApi } from '../../api/orders';
 import { auctionsApi } from '../../api/auctions';
+import { pricingApi } from '../../api/pricing';
 import { useAuth } from '../../context/AuthContext';
 import { formatBatchPurity } from '../../utils/formatters';
 
@@ -13,6 +14,8 @@ export function ListingDetail() {
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mlPrice, setMlPrice] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [bidding, setBidding] = useState(false);
   const [error, setError] = useState('');
@@ -48,6 +51,16 @@ export function ListingDetail() {
 
   useEffect(() => {
     loadListing();
+    if (id) {
+      setMlLoading(true);
+      pricingApi.getMlPriceForListing(id)
+        .then(res => setMlPrice(res?.data || res))
+        .catch(err => {
+          console.error('Failed to load ML price prediction:', err);
+          setMlPrice({ modelAvailable: false, reason: 'ML prediction unavailable — insufficient historical data.' });
+        })
+        .finally(() => setMlLoading(false));
+    }
   }, [id]);
 
   // Pre-fill user company delivery defaults
@@ -406,6 +419,48 @@ export function ListingDetail() {
                     {pricePerTon.toLocaleString()}
                   </span>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>/ Tonne</span>
+                </div>
+
+                {/* ML Price Intelligence Section */}
+                <div
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    borderRadius: 'var(--radius-md, 6px)',
+                    padding: 'var(--space-2) var(--space-3)',
+                    marginTop: 'var(--space-3)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#2563eb', letterSpacing: '0.04em' }}>
+                        ML PRICE INTELLIGENCE
+                      </span>
+                      <span className="badge" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>
+                        ML Prediction
+                      </span>
+                    </div>
+                    {mlPrice?.predictedPricePerTonne && mlPrice?.modelAvailable && (
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: '#2563eb' }}>
+                        ₹{Math.round(mlPrice.predictedPricePerTonne).toLocaleString()}/T
+                      </span>
+                    )}
+                  </div>
+                  {mlLoading ? (
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      Computing XGBoost inference...
+                    </div>
+                  ) : mlPrice?.modelAvailable && mlPrice?.predictedPricePerTonne ? (
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                      <span>Benchmark: ₹{mlPrice.ruleBasedComparison?.recommendedLowerPrice}–₹{mlPrice.ruleBasedComparison?.recommendedUpperPrice}</span>
+                      {mlPrice.mae && <span>• MAE: ±₹{mlPrice.mae}</span>}
+                      {mlPrice.r2 && <span>• R²: {mlPrice.r2}</span>}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                      ML prediction unavailable — insufficient historical data.
+                    </div>
+                  )}
                 </div>
               </div>
 

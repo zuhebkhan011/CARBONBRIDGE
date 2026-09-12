@@ -16,6 +16,7 @@ const envSchema = z.object({
   UPLOAD_MAX_FILE_SIZE_MB: z.coerce.number().default(10),
   CRYO_FREIGHT_BASE_RATE_PER_KM: z.coerce.number().default(1.85),
   CRYO_TRANSIT_ESTIMATE_KM_PER_HOUR: z.coerce.number().default(45),
+  ML_SERVICE_URL: z.string().default('http://localhost:8000'),
 });
 
 const parsed = envSchema.safeParse(process.env);

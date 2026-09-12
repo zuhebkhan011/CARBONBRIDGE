@@ -40,3 +40,12 @@ coverage/
 # Temporary and scratch files
 scratch/
 design-skills-pack/
+
+# Python & ML Service
+.venv/
+ml-service/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+

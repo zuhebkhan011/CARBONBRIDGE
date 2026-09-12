@@ -18,6 +18,7 @@ import { authenticate, requireRole } from '../common/middleware/auth.js';
 import { Role } from '@prisma/client';
 
 import { AuthController } from '../modules/auth/auth.controller.js';
+import { PricingController } from '../modules/pricing/pricing.controller.js';
 import { validateRequest } from '../common/validation/validate.js';
 import { updateProfileSchema } from '../modules/auth/auth.dto.js';
 
@@ -40,3 +41,5 @@ apiRouter.use('/logistics', logisticsRouter);
 apiRouter.use('/notifications', notificationsRouter);
 apiRouter.use('/insights', insightsRouter);
 apiRouter.get('/opportunities', authenticate, requireRole(Role.SELLER, Role.ADMIN), InsightsController.getSellerOpportunities);
+apiRouter.get('/ai/pricing/ml/:listingId', authenticate, PricingController.getMlPriceForListing);
+

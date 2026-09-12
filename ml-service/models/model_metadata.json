@@ -1,0 +1,22 @@
+{
+  "modelName": "xgboost-co2-price",
+  "version": "1.0.0",
+  "trainedAt": "2026-09-12T13:17:38.960550+00:00",
+  "sampleCount": 680,
+  "validationSamples": 170,
+  "mae": 30.39,
+  "rmse": 38.16,
+  "r2": 0.9689,
+  "trainMae": 11.78,
+  "trainR2": 0.995,
+  "features": [
+    "purity",
+    "quantityTonnes",
+    "distanceKm",
+    "demandIndex",
+    "supplyIndex",
+    "auctionAveragePrice",
+    "intendedUse_encoded"
+  ],
+  "dataSource": "SYNTHETIC TRAINING DATA \u2014 NOT REAL MARKET DATA"
+}
