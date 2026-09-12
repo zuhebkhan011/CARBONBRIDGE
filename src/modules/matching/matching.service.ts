@@ -45,6 +45,8 @@ export interface ContributingLot {
   landedCostPerTon: number;
   totalLotCost: number;
   hasCertificate: boolean;
+  coaExtractionStatus?: string | null;
+  coaHasDiscrepancy?: boolean;
 }
 
 export interface SingleSupplierMatch {
@@ -70,6 +72,8 @@ export interface SingleSupplierMatch {
   deliveryFeasibility: DeliveryFeasibility;
   whyThisMatch: string[];
   hasCertificate: boolean;
+  coaExtractionStatus?: string | null;
+  coaHasDiscrepancy?: boolean;
 }
 
 export interface MultiSupplierCompositeMatch {
@@ -193,6 +197,8 @@ export function calculateMatchScore(params: {
   landedCostPerTon: number;
   distanceKm: number;
   hasCertificate: boolean;
+  coaExtractionStatus?: string | null;
+  coaHasDiscrepancy?: boolean;
   feasibility: DeliveryFeasibility;
 }): { totalScore: number; rating: 'Excellent' | 'Good' | 'Moderate' | 'Fair'; breakdown: ScoreBreakdown } {
   const {
@@ -203,6 +209,8 @@ export function calculateMatchScore(params: {
     landedCostPerTon,
     distanceKm,
     hasCertificate,
+    coaExtractionStatus,
+    coaHasDiscrepancy,
     feasibility,
   } = params;
 
@@ -253,8 +261,17 @@ export function calculateMatchScore(params: {
   }
 
   // 5. Availability & Readiness (max 10 pts)
-  const availScore = hasCertificate ? 10 : 7;
-  const availRating: 'Excellent' | 'Good' | 'Moderate' | 'Fair' = hasCertificate ? 'Excellent' : 'Good';
+  let availScore = 7;
+  let availRating: 'Excellent' | 'Good' | 'Moderate' | 'Fair' = 'Good';
+  if (hasCertificate) {
+    if (coaHasDiscrepancy) {
+      availScore = 8;
+      availRating = 'Good';
+    } else {
+      availScore = 10;
+      availRating = 'Excellent';
+    }
+  }
 
   // 6. Delivery Feasibility (max 10 pts)
   let feasScore = 10;
@@ -328,6 +345,8 @@ export function generateWhyThisMatch(params: {
   landedCostPerTon: number;
   distanceKm: number;
   hasCertificate: boolean;
+  coaExtractionStatus?: string | null;
+  coaHasDiscrepancy?: boolean;
   feasibility: DeliveryFeasibility;
 }): string[] {
   const {
@@ -339,6 +358,8 @@ export function generateWhyThisMatch(params: {
     landedCostPerTon,
     distanceKm,
     hasCertificate,
+    coaExtractionStatus,
+    coaHasDiscrepancy,
     feasibility,
   } = params;
 
@@ -372,7 +393,11 @@ export function generateWhyThisMatch(params: {
 
   // Certificate
   if (hasCertificate) {
-    reasons.push(`✓ Certificate of Analysis (CoA) available`);
+    if (coaExtractionStatus === 'EXTRACTED' && !coaHasDiscrepancy) {
+      reasons.push(`✓ CoA AI analyzed with consistent batch purity specs`);
+    } else {
+      reasons.push(`✓ Certificate of Analysis (CoA) available`);
+    }
   }
 
   return reasons;
@@ -418,7 +443,11 @@ export class MatchingService {
       },
       include: {
         batch: {
-          include: { certificate: true },
+          include: {
+            certificate: {
+              include: { extraction: true },
+            },
+          },
         },
         seller: true,
       },
@@ -447,6 +476,8 @@ export class MatchingService {
       const availableQty = Math.min(listingOfferedQty, listing.batch.availableQuantity.toNumber());
       const purity = listing.batch.purityPercentage.toNumber();
       const hasCertificate = Boolean(listing.batch.certificate);
+      const coaExtractionStatus = listing.batch.certificate?.extraction?.status ?? null;
+      const coaHasDiscrepancy = Boolean(listing.batch.certificate?.extraction?.hasDiscrepancy);
 
       // Delivery feasibility calculation
       const feasibility = calculateDeliveryFeasibility(distanceKm, requirement.requiredDeliveryDate);
@@ -460,6 +491,8 @@ export class MatchingService {
         landedCostPerTon,
         distanceKm,
         hasCertificate,
+        coaExtractionStatus,
+        coaHasDiscrepancy,
         feasibility,
       });
 
@@ -472,6 +505,8 @@ export class MatchingService {
         landedCostPerTon,
         distanceKm,
         hasCertificate,
+        coaExtractionStatus,
+        coaHasDiscrepancy,
         feasibility,
       });
 
@@ -490,6 +525,8 @@ export class MatchingService {
         landedCostPerTon,
         totalLotCost: Math.round(landedCostPerTon * availableQty * 100) / 100,
         hasCertificate,
+        coaExtractionStatus,
+        coaHasDiscrepancy,
         singleScore: scoreResult.totalScore,
         singleRating: scoreResult.rating,
         singleBreakdown: scoreResult.breakdown,
@@ -532,6 +569,8 @@ export class MatchingService {
           deliveryFeasibility: lot.feasibility,
           whyThisMatch: lot.whyThisMatch,
           hasCertificate: lot.hasCertificate,
+          coaExtractionStatus: lot.coaExtractionStatus,
+          coaHasDiscrepancy: lot.coaHasDiscrepancy,
         });
       }
     }
@@ -575,6 +614,8 @@ export class MatchingService {
             landedCostPerTon: lot.landedCostPerTon,
             totalLotCost: lotTotalCost,
             hasCertificate: lot.hasCertificate,
+            coaExtractionStatus: lot.coaExtractionStatus,
+            coaHasDiscrepancy: lot.coaHasDiscrepancy,
           });
           accumulatedQty += takeQty;
         }

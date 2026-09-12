@@ -83,6 +83,9 @@ export class DocumentsService {
       },
     });
 
+    // Invalidate prior extraction if document is replaced
+    await prisma.coaExtraction.deleteMany({ where: { batchId: batch.id } });
+
     await AuditService.recordEvent({
       entityType: 'CERTIFICATE_OF_ANALYSIS',
       entityId: coa.id,

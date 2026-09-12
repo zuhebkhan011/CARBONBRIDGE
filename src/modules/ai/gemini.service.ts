@@ -4,6 +4,10 @@ import { logger } from '../../common/logging/logger.js';
 export interface GeminiGenerateOptions {
   systemPrompt?: string;
   userPrompt: string;
+  inlineData?: {
+    mimeType: string;
+    data: string; // base64 encoded
+  };
   responseSchema?: any;
   temperature?: number;
   timeoutMs?: number;
@@ -12,7 +16,7 @@ export interface GeminiGenerateOptions {
 export class GeminiService {
   /**
    * Generates content from the Google Gemini API with strict timeout, JSON structured output,
-   * and clean error capture. Returns null if Gemini is unconfigured or unreachable.
+   * multimodal document input, and clean error capture. Returns null if Gemini is unconfigured or unreachable.
    */
   public static async generateJson<T = any>(options: GeminiGenerateOptions): Promise<T | null> {
     const apiKey = config.GEMINI_API_KEY;
@@ -22,7 +26,7 @@ export class GeminiService {
     }
 
     const modelName = config.GEMINI_MODEL || 'gemini-2.5-flash';
-    const timeoutMs = options.timeoutMs || 4500;
+    const timeoutMs = options.timeoutMs || 8000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -40,9 +44,21 @@ export class GeminiService {
           parts: [{ text: `System Instructions:\n${options.systemPrompt}` }],
         });
       }
+
+      const userParts: any[] = [];
+      if (options.inlineData) {
+        userParts.push({
+          inlineData: {
+            mimeType: options.inlineData.mimeType,
+            data: options.inlineData.data,
+          },
+        });
+      }
+      userParts.push({ text: options.userPrompt });
+
       contents.push({
         role: 'user',
-        parts: [{ text: options.userPrompt }],
+        parts: userParts,
       });
 
       const bodyPayload: any = {

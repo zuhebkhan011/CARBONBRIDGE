@@ -65,7 +65,9 @@ export class BatchesService {
         listings: {
           orderBy: { createdAt: 'desc' },
         },
-        certificate: true,
+        certificate: {
+          include: { extraction: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -94,7 +96,9 @@ export class BatchesService {
         listings: {
           orderBy: { createdAt: 'desc' },
         },
-        certificate: true,
+        certificate: {
+          include: { extraction: true },
+        },
         allocations: {
           select: {
             id: true,

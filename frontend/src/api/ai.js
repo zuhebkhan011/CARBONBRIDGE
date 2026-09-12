@@ -5,4 +5,9 @@ export const aiApi = {
     api.post('/ai/match', { requirementId, limit, weights }),
   parseRequirement: (text) =>
     api.post('/ai/parse-requirement', { text }),
+  extractCoA: (batchId) =>
+    api.post(`/ai/coa/extract/${batchId}`),
+  getCoAExtraction: (batchId) =>
+    api.get(`/ai/coa/${batchId}`),
 };
+

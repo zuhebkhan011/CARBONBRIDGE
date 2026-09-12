@@ -4,6 +4,7 @@ import { listingsApi } from '../../api/listings';
 import { ordersApi } from '../../api/orders';
 import { auctionsApi } from '../../api/auctions';
 import { pricingApi } from '../../api/pricing';
+import { documentsApi } from '../../api/documents';
 import { useAuth } from '../../context/AuthContext';
 import { formatBatchPurity } from '../../utils/formatters';
 
@@ -336,6 +337,165 @@ export function ListingDetail() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Certificate of Analysis (CoA) Intelligence Card */}
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+              <div>
+                <div className="eyebrow" style={{ color: 'var(--color-primary)' }}>Quality Assurance</div>
+                <h3 style={{ margin: 0 }}>Certificate of Analysis (CoA)</h3>
+              </div>
+              {listing.batch?.certificate?.extraction ? (
+                <span
+                  className={`badge ${listing.batch.certificate.extraction.hasDiscrepancy ? 'badge-warning' : 'badge-success'}`}
+                  style={{ fontSize: 'var(--text-xs)' }}
+                >
+                  {listing.batch.certificate.extraction.hasDiscrepancy ? 'Review Required' : 'AI Extracted from CoA'}
+                </span>
+              ) : listing.batch?.certificate ? (
+                <span className="badge badge-neutral" style={{ fontSize: 'var(--text-xs)' }}>
+                  Certificate Uploaded
+                </span>
+              ) : (
+                <span className="badge badge-neutral" style={{ fontSize: 'var(--text-xs)' }}>
+                  No Certificate Attached
+                </span>
+              )}
+            </div>
+
+            {listing.batch?.certificate ? (
+              <div>
+                {listing.batch.certificate.extraction ? (
+                  <>
+                    {/* Discrepancy warning if flagged */}
+                    {listing.batch.certificate.extraction.hasDiscrepancy && (
+                      <div
+                        style={{
+                          padding: 'var(--space-3)',
+                          background: 'rgba(245, 158, 11, 0.08)',
+                          border: '1px solid #f59e0b',
+                          borderRadius: 'var(--radius-md)',
+                          color: '#b45309',
+                          marginBottom: 'var(--space-4)',
+                          fontSize: 'var(--text-xs)',
+                        }}
+                      >
+                        <strong>⚠ Discrepancy Detected for Review:</strong>
+                        <div style={{ marginTop: '2px' }}>
+                          A variance was detected between seller-declared specs and the extracted certificate values. The PostgreSQL batch record remains the source of truth.
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-2" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                      <div>
+                        <span className="match-label">Tested CO₂ Purity</span>
+                        <span className="match-value-lg" style={{ color: 'var(--color-primary)' }}>
+                          {listing.batch.certificate.extraction.co2PurityPercent != null
+                            ? `${Number(listing.batch.certificate.extraction.co2PurityPercent).toFixed(2)}%`
+                            : 'Not reported'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="match-label">Moisture Content</span>
+                        <span className="match-value-lg">
+                          {listing.batch.certificate.extraction.moisturePercent != null
+                            ? `${listing.batch.certificate.extraction.moisturePercent}%`
+                            : 'Not reported'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="match-label">Testing Laboratory</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {listing.batch.certificate.extraction.laboratoryName || 'Not reported in CoA'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="match-label">Test Date</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {listing.batch.certificate.extraction.testDate
+                            ? new Date(listing.batch.certificate.extraction.testDate).toLocaleDateString()
+                            : 'Not reported'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="match-label">Certificate Batch Ref</span>
+                        <span className="text-mono" style={{ fontWeight: 600 }}>
+                          {listing.batch.certificate.extraction.batchReference || 'Not reported'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="match-label">Cross-Check Status</span>
+                        <span style={{ fontWeight: 600, color: listing.batch.certificate.extraction.hasDiscrepancy ? '#b45309' : 'var(--color-success)' }}>
+                          {listing.batch.certificate.extraction.hasDiscrepancy
+                            ? '⚠ Review Required'
+                            : '✓ Batch & Purity Consistent'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Additional Quality Parameters */}
+                    {Array.isArray(listing.batch.certificate.extraction.qualityParameters) &&
+                      listing.batch.certificate.extraction.qualityParameters.length > 0 && (
+                        <div style={{ marginBottom: 'var(--space-4)' }}>
+                          <span className="match-label" style={{ marginBottom: 'var(--space-2)', display: 'block' }}>
+                            Certificate Test Details
+                          </span>
+                          <table className="data-table" style={{ fontSize: 'var(--text-xs)' }}>
+                            <thead>
+                              <tr>
+                                <th>Parameter</th>
+                                <th>Tested Value</th>
+                                <th>Unit</th>
+                                <th>Specification</th>
+                                <th>Result</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {listing.batch.certificate.extraction.qualityParameters.map((p, idx) => (
+                                <tr key={idx}>
+                                  <td><strong>{p.name}</strong></td>
+                                  <td>{p.value != null ? p.value : '—'}</td>
+                                  <td>{p.unit || '—'}</td>
+                                  <td>{p.specification || '—'}</td>
+                                  <td>
+                                    <span className={`badge ${p.status === 'PASS' ? 'badge-success' : p.status === 'FAIL' ? 'badge-danger' : 'badge-neutral'}`}>
+                                      {p.status || 'Reported'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-3)' }}>
+                    A laboratory Certificate of Analysis (CoA) document is attached to this lot.
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 'var(--space-3)', borderTop: '1px solid var(--neutral-150)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                    Original Document: {listing.batch.certificate.originalName || 'Certificate_of_Analysis.pdf'}
+                  </span>
+                  <a
+                    href={documentsApi.downloadUrl(listing.batch.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary btn-sm"
+                  >
+                    View Original PDF
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+                The supplier has not uploaded a laboratory certificate for this batch. Purity is based on seller plant telemetry declarations.
+              </p>
+            )}
           </div>
 
           {/* Auction Bidding Activity Table (if Auction) */}

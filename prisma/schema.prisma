@@ -149,6 +149,7 @@ model Batch {
 
   listings             Listing[]
   certificate          CertificateOfAnalysis?
+  extraction           CoaExtraction?
   allocations          Allocation[]
 
   @@index([sellerId])
@@ -299,17 +300,69 @@ model Shipment {
 }
 
 model CertificateOfAnalysis {
-  id         String    @id @default(uuid())
-  batchId    String    @unique
-  batch      Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  id         String         @id @default(uuid())
+  batchId    String         @unique
+  batch      Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
   fileName   String
   fileUrl    String
   fileSize   Int
   mimeType   String
-  status     CoAStatus @default(CERTIFICATE_UPLOADED)
-  uploadedAt DateTime  @default(now())
+  status     CoAStatus      @default(CERTIFICATE_UPLOADED)
+  uploadedAt DateTime       @default(now())
+
+  extraction CoaExtraction?
 
   @@index([batchId])
+}
+
+enum CoaExtractionStatus {
+  PENDING
+  PROCESSING
+  EXTRACTED
+  PARTIAL
+  FAILED
+  REVIEW_REQUIRED
+}
+
+model CoaExtraction {
+  id                  String               @id @default(uuid())
+  certificateId       String               @unique
+  certificate         CertificateOfAnalysis @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  batchId             String               @unique
+  batch               Batch                @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  status              CoaExtractionStatus  @default(PENDING)
+  documentType        String?              @default("COA")
+  co2PurityPercent    Decimal?             @db.Decimal(5, 2)
+  moisturePercent     Decimal?             @db.Decimal(6, 4)
+  testDate            DateTime?
+  batchReference      String?
+  laboratoryName      String?
+
+  // Cross-check results against batch
+  batchReferenceMatch Boolean?
+  purityMatch         Boolean?
+  purityDifference    Decimal?             @db.Decimal(5, 2)
+  crossCheckSummary   String?
+  hasDiscrepancy      Boolean              @default(false)
+
+  // Rich extraction JSON & source provenance
+  qualityParameters   Json?
+  contaminants        Json?
+  provenance          Json?
+  warnings            Json?
+  missingFields       Json?
+  rawExtraction       Json?
+
+  // Model and latency metadata
+  modelName           String?
+  modelVersion        String?
+  latencyMs           Int?
+  extractedAt         DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([batchId])
+  @@index([certificateId])
 }
 
 model IdempotencyKey {

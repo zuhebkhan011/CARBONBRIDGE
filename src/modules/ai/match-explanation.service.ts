@@ -11,6 +11,11 @@ export interface ExplanationContext {
   budgetCeiling?: number | null;
   distanceKm: number;
   hasCertificate: boolean;
+  coaExtraction?: {
+    co2PurityPercent?: number | null;
+    hasDiscrepancy?: boolean;
+    status?: string;
+  } | null;
   feasibilityLabel: string;
   scoreBreakdown: AIMatchScoreBreakdown;
   matchScore: number;
@@ -40,16 +45,15 @@ export class MatchExplanationService {
   }
 
   private static async generateWithGemini(context: ExplanationContext): Promise<ExplanationResult | null> {
-    const systemPrompt = `You are the AI Matchmaker explanation engine for CarbonBridge.
-Given structured metrics for a commercial CO2 match between a buyer requirement and a seller listing, produce concise, professional bullet points explaining:
-1. Why this match scored well (reasons)
-2. Potential concerns (concerns)
-3. Actionable recommendation (recommendation)
+    const systemPrompt = `You are a matchmaker analyst for CarbonBridge, an industrial B2B CO2 platform.
+Analyze this buyer requirement vs supplier listing match.
 Rules:
-- Strictly ground your statements in the provided data.
-- NEVER invent facts, certifications, or numbers not present in the input.
-- Output JSON schema:
-{"reasons": ["string"], "concerns": ["string"], "recommendation": "string"}`;
+1. Provide 2-3 specific 'reasons' (strengths).
+2. Provide 1-2 specific 'concerns' (risks or trade-offs), or an empty array if virtually perfect.
+3. Provide 1 practical 'recommendation'.
+4. Ground all statements strictly in the numeric data provided.
+5. NEVER use the words 'verified', 'authenticity verified', 'lab verified', or 'AI verified'. Refer to documents as 'Certificate of Analysis available' or 'CoA AI Analyzed'.
+Output strict JSON: {"reasons": string[], "concerns": string[], "recommendation": string}`;
 
     const userPrompt = `Match Metrics:
 - Buyer Required Quantity: ${context.targetQuantity} T
@@ -146,9 +150,17 @@ Rules:
       concerns.push(`⚠ Delivery timeline is tight against cryogenic tanker dispatch buffer`);
     }
 
-    // 6. Certificate of Analysis
-    if (context.hasCertificate) {
-      reasons.push(`✓ Verified Certificate of Analysis (CoA) documentation available`);
+    // 6. Certificate of Analysis & CoA Intelligence
+    if (context.coaExtraction && context.coaExtraction.hasDiscrepancy) {
+      concerns.push(
+        `⚠ Quality Data Mismatch: CoA extracted purity (${context.coaExtraction.co2PurityPercent}%) differs from listed batch purity (${context.offeredPurity}%)`
+      );
+    } else if (context.coaExtraction && context.coaExtraction.status === 'EXTRACTED') {
+      reasons.push(
+        `✓ CoA AI Analyzed: Quality parameters extracted from document (${context.coaExtraction.co2PurityPercent ?? context.offeredPurity}% CO₂)`
+      );
+    } else if (context.hasCertificate) {
+      reasons.push(`✓ Certificate of Analysis (CoA) documentation available`);
     } else {
       concerns.push(`⚠ Quality Certificate of Analysis (CoA) is pending upload by producer`);
     }

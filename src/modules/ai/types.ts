@@ -125,3 +125,58 @@ export interface ParsedRequirementResult {
   parserMode: 'GEMINI_AI' | 'DETERMINISTIC_NLP_FALLBACK';
   summaryMessage: string;
 }
+
+export interface CoaQualityParameter {
+  name: string;
+  value: string | number;
+  unit?: string | null;
+  sourceText?: string | null;
+  sourcePage?: number | null;
+}
+
+export interface CoaContaminant {
+  name: string;
+  value: string | number;
+  unit?: string | null;
+  sourceText?: string | null;
+}
+
+export interface CoaExtractionData {
+  documentType: string;
+  co2PurityPercent: number | null;
+  moisturePercent: number | null;
+  testDate: string | null;
+  batchReference: string | null;
+  laboratoryName: string | null;
+  contaminants: CoaContaminant[];
+  qualityParameters: CoaQualityParameter[];
+  extractionNotes: string[];
+  missingFields: string[];
+  warnings: string[];
+  provenance?: Record<string, any>;
+}
+
+export interface CoaCrossCheckResult {
+  batchReferenceMatch: boolean | null;
+  batchReferenceNote: string;
+  purityMatch: boolean | null;
+  purityDifference: number | null;
+  purityDifferencePoints: string | null;
+  purityNote: string;
+  hasDiscrepancy: boolean;
+  summary: string;
+}
+
+export interface CoaAnalysisResponse {
+  batchId: string;
+  certificateId: string;
+  status: 'PENDING' | 'PROCESSING' | 'EXTRACTED' | 'PARTIAL' | 'FAILED' | 'REVIEW_REQUIRED';
+  extraction: CoaExtractionData | null;
+  crossCheck: CoaCrossCheckResult | null;
+  modelName: string;
+  modelVersion: string;
+  disclaimer: string;
+  latencyMs?: number;
+  extractedAt: string;
+}
+

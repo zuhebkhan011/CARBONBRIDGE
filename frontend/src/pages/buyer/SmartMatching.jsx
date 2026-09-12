@@ -447,9 +447,19 @@ export function SmartMatching() {
                     <td className="text-mono">₹{m.landedUnitCost.toLocaleString()}/T</td>
                     <td>{m.location}</td>
                     <td>
-                      {m.hasCertificate ? (
-                        <span className="badge badge-success" style={{ fontSize: '11px' }}>
-                          CoA Available
+                      {m.coaExtractionStatus === 'EXTRACTED' || m.coaExtractionStatus === 'PARTIAL' ? (
+                        m.coaHasDiscrepancy ? (
+                          <span className="badge badge-warning" style={{ fontSize: '11px' }} title="Discrepancy detected">
+                            Review Required
+                          </span>
+                        ) : (
+                          <span className="badge badge-success" style={{ fontSize: '11px' }}>
+                            CoA AI Analyzed
+                          </span>
+                        )
+                      ) : m.hasCertificate ? (
+                        <span className="badge badge-info" style={{ fontSize: '11px' }}>
+                          CoA Uploaded
                         </span>
                       ) : (
                         <span className="badge" style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>

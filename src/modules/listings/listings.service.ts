@@ -59,7 +59,11 @@ export class ListingsService {
       },
       include: {
         batch: {
-          include: { certificate: true },
+          include: {
+            certificate: {
+              include: { extraction: true },
+            },
+          },
         },
         seller: {
           select: { id: true, name: true, address: true, latitude: true, longitude: true },
@@ -194,7 +198,11 @@ export class ListingsService {
       where: { id },
       include: {
         batch: {
-          include: { certificate: true },
+          include: {
+            certificate: {
+              include: { extraction: true },
+            },
+          },
         },
         seller: {
           select: { id: true, name: true, address: true, latitude: true, longitude: true },

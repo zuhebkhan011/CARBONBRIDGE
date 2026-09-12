@@ -63,7 +63,11 @@ export class AiService {
       },
       include: {
         batch: {
-          include: { certificate: true },
+          include: {
+            certificate: {
+              include: { extraction: true },
+            },
+          },
         },
         seller: true,
       },
@@ -140,7 +144,17 @@ export class AiService {
       else availabilityScore = 2;
 
       // (6) Certificate / Quality Documentation (weight: 5%)
-      const certificateScore = hasCertificate ? 5 : 2;
+      const coaExtraction = listing.batch.certificate?.extraction;
+      let certificateScore = 2;
+      if (hasCertificate) {
+        if (coaExtraction && coaExtraction.hasDiscrepancy) {
+          certificateScore = 3; // Discrepancy flagged for review
+        } else if (coaExtraction && coaExtraction.status === 'EXTRACTED') {
+          certificateScore = 5; // CoA available and AI extraction completed
+        } else {
+          certificateScore = 4; // CoA uploaded and available
+        }
+      }
 
       // (7) Intended Use Compatibility (weight: 5%)
       let useCompatibilityScore = 4;
@@ -204,6 +218,7 @@ export class AiService {
 
     const matches: AIMatchCandidate[] = await Promise.all(
       topCandidates.map(async (lot) => {
+        const candidateCoaExtraction = lot.listing.batch.certificate?.extraction;
         const explanation = await MatchExplanationService.generateExplanation({
           targetQuantity: targetQty,
           availableQuantity: lot.availableQty,
@@ -213,6 +228,13 @@ export class AiService {
           budgetCeiling,
           distanceKm: lot.distanceKm,
           hasCertificate: lot.hasCertificate,
+          coaExtraction: candidateCoaExtraction
+            ? {
+                co2PurityPercent: candidateCoaExtraction.co2PurityPercent ? candidateCoaExtraction.co2PurityPercent.toNumber() : null,
+                hasDiscrepancy: candidateCoaExtraction.hasDiscrepancy,
+                status: candidateCoaExtraction.status,
+              }
+            : null,
           feasibilityLabel: lot.feasibility.label,
           scoreBreakdown: lot.breakdown,
           matchScore: lot.totalScore,
