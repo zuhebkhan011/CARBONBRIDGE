@@ -108,4 +108,56 @@ describe('Natural Language Requirement Parser Unit Suite', () => {
       expect(parsed.requiredDate).toBe('2026-09-30');
     });
   });
+
+  describe('4. Voice Input Spoken Transcripts & Edited Transcripts Parsing', () => {
+    // Reference date for date calculations
+    const refDate = new Date(2026, 8, 12);
+
+    it('TEST 1 — English: parses spoken transcript "I need 300 tonnes of CO2 in Rajkot with minimum purity 90 percent."', () => {
+      const spokenTranscript = 'I need 300 tonnes of CO2 in Rajkot with minimum purity 90 percent.';
+      const parsed = RequirementParserService.parseWithDeterministicFallback(spokenTranscript);
+
+      expect(parsed.quantityTonnes).toBe(300);
+      expect(parsed.minimumPurity).toBe(90);
+      expect(parsed.city).toBe('Rajkot');
+      expect(parsed.state).toBe('Gujarat');
+      expect(parsed.location).toBe('Rajkot, Gujarat');
+    });
+
+    it('TEST 2 — Hinglish: parses spoken transcript "Mujhe Rajkot mein 300 tonne CO2 chahiye, minimum purity 90 percent."', () => {
+      const spokenTranscript = 'Mujhe Rajkot mein 300 tonne CO2 chahiye, minimum purity 90 percent.';
+      const parsed = RequirementParserService.parseWithDeterministicFallback(spokenTranscript);
+
+      expect(parsed.quantityTonnes).toBe(300);
+      expect(parsed.minimumPurity).toBe(90);
+      expect(parsed.city).toBe('Rajkot');
+      expect(parsed.state).toBe('Gujarat');
+      expect(parsed.location).toBe('Rajkot, Gujarat');
+    });
+
+    it('TEST 3 — Date: parses spoken transcript with delivery date "Mujhe 300 tonne CO2 Ahmedabad mein chahiye delivery 30 September 2026 tak."', () => {
+      const spokenTranscript = 'Mujhe 300 tonne CO2 Ahmedabad mein chahiye delivery 30 September 2026 tak.';
+      const date = extractExactDate(spokenTranscript, refDate);
+      expect(date).toBe('2026-09-30');
+
+      const parsed = RequirementParserService.parseWithDeterministicFallback(spokenTranscript);
+      expect(parsed.quantityTonnes).toBe(300);
+      expect(parsed.city).toBe('Ahmedabad');
+      expect(parsed.state).toBe('Gujarat');
+    });
+
+    it('TEST 4 — Edited Transcript: parses manually edited text instead of original spoken speech', () => {
+      const originalSpokenTranscript = 'I need 200 tonnes in Surat';
+      // User edits speech transcript before clicking "Parse with AI"
+      const editedTranscript = originalSpokenTranscript.replace('200 tonnes in Surat', '500 tonnes in Vadodara with 95% purity');
+
+      expect(editedTranscript).toBe('I need 500 tonnes in Vadodara with 95% purity');
+
+      const parsed = RequirementParserService.parseWithDeterministicFallback(editedTranscript);
+      expect(parsed.quantityTonnes).toBe(500);
+      expect(parsed.minimumPurity).toBe(95);
+      expect(parsed.city).toBe('Vadodara');
+      expect(parsed.state).toBe('Gujarat');
+    });
+  });
 });

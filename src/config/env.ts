@@ -27,7 +27,7 @@ const envSchema = z.object({
   LOGISTICS_AVERAGE_SPEED_KM_H: z.coerce.number().default(45.0),
   ML_SERVICE_URL: z.string().default('http://localhost:8000'),
   GEMINI_API_KEY: z.string().optional().default(''),
-  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -41,3 +41,18 @@ export const generalRateLimiter = rateLimit({
     },
   },
 });
+
+export const aiAssistantRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // 30 queries per minute per user/IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'AI Assistant rate limit reached. Please wait a moment before asking another question.',
+    },
+  },
+});
+

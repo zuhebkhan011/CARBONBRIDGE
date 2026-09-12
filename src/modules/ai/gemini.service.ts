@@ -63,10 +63,17 @@ export class GeminiService {
       };
     }
 
-    const primaryModel = config.GEMINI_MODEL || 'gemini-3.5-flash';
+    const primaryModel = config.GEMINI_MODEL || 'gemini-3.6-flash';
     // List of candidate models in prioritized order to withstand rate limits or temporary outages
     const candidateModels = Array.from(
-      new Set([primaryModel, 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.7-flash'])
+      new Set([
+        primaryModel,
+        'gemini-3.6-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-lite-latest',
+        'gemini-3.5-flash',
+      ])
     );
 
     let lastErrorCategory: GeminiErrorCategory = 'other API error';
@@ -183,7 +190,8 @@ export class GeminiService {
         }
 
         try {
-          const parsed = JSON.parse(rawText);
+          const cleanedText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          const parsed = JSON.parse(cleanedText);
           logger.info(
             {
               geminiConfigured: true,

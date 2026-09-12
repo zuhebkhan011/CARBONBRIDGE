@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { requirementsApi } from '../../api/requirements';
 import { aiApi } from '../../api/ai';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import './PostRequirement.css';
 
 const CITY_COORDS = {
@@ -62,10 +63,24 @@ export function PostRequirement() {
   const [nlLoading, setNlLoading] = useState(false);
   const [nlMessage, setNlMessage] = useState('');
 
+  // Web Speech recognition for voice-to-text requirement input
+  const { isListening, micNotice, setMicNotice, toggleListening, stopListening } = useSpeechRecognition({
+    onTranscript: (transcript) => {
+      setNlText(transcript);
+      setNlMessage('');
+    },
+    lang: 'en-IN',
+    defaultErrorMessage: 'Could not recognize speech. You can type your requirement instead.',
+  });
+
   const handleParseNl = async () => {
     if (!nlText.trim()) return;
+    if (isListening) {
+      stopListening();
+    }
     setNlLoading(true);
     setNlMessage('');
+    setMicNotice('');
     setError('');
 
     try {
@@ -193,17 +208,47 @@ export function PostRequirement() {
           <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 var(--space-2) 0' }}>
             Describe your CO₂ requirement in plain words, and our backend AI will automatically prefill the procurement form:
           </p>
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <input
-              type="text"
-              className="input"
-              style={{ flex: 1, fontSize: '13px' }}
-              value={nlText}
-              onChange={(e) => setNlText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleParseNl(); } }}
-              placeholder='e.g., "Mujhe Ahmedabad mein 300 tonne 90%+ CO₂ chahiye, ₹2500/T ke andar, next month"'
-              disabled={nlLoading}
-            />
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+            <div className="cb-req-input-wrapper">
+              <input
+                type="text"
+                className="input"
+                style={{
+                  width: '100%',
+                  fontSize: '13px',
+                  paddingRight: '38px',
+                  borderColor: isListening ? '#10b981' : undefined,
+                  boxShadow: isListening ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : undefined,
+                  transition: 'border-color 0.2s, box-shadow 0.2s',
+                }}
+                value={nlText}
+                onChange={(e) => {
+                  setNlText(e.target.value);
+                  if (micNotice) setMicNotice('');
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleParseNl(); } }}
+                placeholder={
+                  isListening
+                    ? '🎤 Listening... Speak your CO₂ requirement now'
+                    : 'e.g., "Mujhe Ahmedabad mein 300 tonne 90%+ CO₂ chahiye, ₹2500/T ke andar, next month"'
+                }
+                disabled={nlLoading}
+              />
+              <button
+                type="button"
+                className={`cb-req-mic-btn ${isListening ? 'listening' : ''}`}
+                onClick={toggleListening}
+                disabled={nlLoading}
+                aria-label="Use voice input"
+                title={isListening ? 'Listening... Click to stop' : 'Speak your requirement'}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              </button>
+            </div>
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -214,7 +259,27 @@ export function PostRequirement() {
               {nlLoading ? 'Parsing...' : 'Parse with AI'}
             </button>
           </div>
-          {nlMessage && (
+
+          {/* Real-time speech recognition feedback / permission notice */}
+          {isListening && (
+            <div className="cb-req-mic-notice listening">
+              <span className="cb-mic-pulse-dot" />
+              <span>Listening... Speak your requirement in English, Hindi, or Hinglish (click mic or pause to finish)</span>
+            </div>
+          )}
+
+          {micNotice && !isListening && (
+            <div className="cb-req-mic-notice warning">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>{micNotice}</span>
+            </div>
+          )}
+
+          {nlMessage && !isListening && (
             <div
               style={{
                 fontSize: '11px',
