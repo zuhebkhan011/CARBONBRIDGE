@@ -1,7 +1,7 @@
 import { Prisma, RequirementStatus } from '@prisma/client';
 import { prisma } from '../../database/prisma.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../../common/errors/AppError.js';
-import { CreateRequirementInput } from './requirements.dto.js';
+import { CreateRequirementInput, isPastDeliveryDate } from './requirements.dto.js';
 import { AuditService } from '../audit/audit.service.js';
 
 export class RequirementsService {
@@ -11,9 +11,8 @@ export class RequirementsService {
     input: CreateRequirementInput
   ) {
     if (input.requiredDeliveryDate) {
-      const deliveryDate = new Date(input.requiredDeliveryDate);
-      if (deliveryDate <= new Date()) {
-        throw new BadRequestError('Required delivery date must be in the future.');
+      if (isPastDeliveryDate(input.requiredDeliveryDate)) {
+        throw new BadRequestError('Delivery date cannot be in the past.');
       }
     }
 

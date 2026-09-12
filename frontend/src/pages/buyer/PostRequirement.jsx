@@ -20,8 +20,17 @@ const CITY_COORDS = {
   'Visakhapatnam': { lat: 17.6868, lng: 83.2185 },
 };
 
+const getTodayDateString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export function PostRequirement() {
   const navigate = useNavigate();
+  const todayDateStr = getTodayDateString();
   const [form, setForm] = useState({
     quantityRequired: '', minPurity: '', deliveryCity: '', deliveryState: '',
     maxBudgetPerUnit: '', intendedUse: '', deliveryByDate: ''
@@ -36,6 +45,14 @@ export function PostRequirement() {
     e.preventDefault();
     setError('');
     setFieldErrors({});
+
+    // Client-side past date check
+    if (form.deliveryByDate && form.deliveryByDate < todayDateStr) {
+      setFieldErrors({ deliveryByDate: 'Delivery date cannot be in the past.' });
+      setError('Delivery date cannot be in the past.');
+      return;
+    }
+
     setLoading(true);
     try {
       const city = form.deliveryCity.trim();
@@ -46,7 +63,7 @@ export function PostRequirement() {
         deliveryLat: coords.lat,
         deliveryLng: coords.lng,
         deliveryAddress: `${form.deliveryCity}, ${form.deliveryState}`,
-        requiredDeliveryDate: form.deliveryByDate ? new Date(form.deliveryByDate).toISOString() : undefined,
+        requiredDeliveryDate: form.deliveryByDate ? new Date(`${form.deliveryByDate}T00:00:00.000Z`).toISOString() : undefined,
         budgetCeilingPerTon: form.maxBudgetPerUnit ? Number(form.maxBudgetPerUnit) : undefined,
         intendedApplication: form.intendedUse || undefined,
       };
@@ -132,7 +149,16 @@ export function PostRequirement() {
               </div>
               <div className="input-group">
                 <label className="input-label">Delivery By Date</label>
-                <input type="date" className="input" value={form.deliveryByDate} onChange={handleChange('deliveryByDate')} />
+                <input
+                  type="date"
+                  className="input"
+                  min={todayDateStr}
+                  value={form.deliveryByDate}
+                  onChange={handleChange('deliveryByDate')}
+                />
+                {(fieldErrors.deliveryByDate || fieldErrors.requiredDeliveryDate) && (
+                  <span className="field-error">{fieldErrors.deliveryByDate || fieldErrors.requiredDeliveryDate}</span>
+                )}
               </div>
             </div>
             <div className="input-group">
