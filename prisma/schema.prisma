@@ -1,0 +1,353 @@
+// CarbonBridge Relational Database Schema
+// Problem Statement PS8: Carbon Capture-to-Product Matchmaking Platform
+// Team: AESTRO
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SELLER
+  BUYER
+  ADMIN
+}
+
+enum CompanyType {
+  EMITTER
+  OFFTAKER
+  ADMIN_ORG
+}
+
+enum BatchStatus {
+  ACTIVE
+  PARTIALLY_ALLOCATED
+  DEPLETED
+  EXPIRED
+}
+
+enum SellingMethod {
+  FIXED_PRICE
+  AUCTION
+}
+
+enum ListingStatus {
+  ACTIVE
+  PENDING_DEAL
+  SOLD
+  DEACTIVATED
+}
+
+enum RequirementStatus {
+  OPEN
+  MATCHED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
+enum AuctionStatus {
+  OPEN
+  FINALIZING
+  SETTLED
+  EXPIRED
+}
+
+enum OrderType {
+  SINGLE_SELLER
+  MULTI_SUPPLIER_COMPOSITE
+}
+
+enum OrderOverallStatus {
+  PENDING
+  CONFIRMED
+  IN_FULFILLMENT
+  DELIVERED
+  RECEIVED
+  CANCELLED
+}
+
+enum ShipmentIndividualStatus {
+  ALLOCATED
+  DISPATCH_PENDING
+  IN_TRANSIT
+  DELIVERED
+  RECEIVED
+}
+
+enum CoAStatus {
+  CERTIFICATE_UPLOADED
+  CERTIFICATE_AVAILABLE
+}
+
+model Company {
+  id                 String       @id @default(uuid())
+  name               String
+  companyType        CompanyType
+  registrationNumber String       @unique
+  latitude           Decimal      @db.Decimal(10, 7)
+  longitude          Decimal      @db.Decimal(10, 7)
+  address            String
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  users              User[]
+  batches            Batch[]
+  listings           Listing[]
+  requirements       Requirement[]
+  orders             Order[]      @relation("BuyerOrders")
+  sellerAuctions     Auction[]    @relation("SellerAuctions")
+  sellerAllocations  Allocation[] @relation("SellerAllocations")
+  sellerShipments    Shipment[]   @relation("SellerShipments")
+  buyerShipments     Shipment[]   @relation("BuyerShipments")
+
+  @@index([companyType])
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  bids          Bid[]
+  notifications Notification[]
+  auditEvents   AuditEvent[]
+
+  @@index([companyId])
+  @@index([role])
+}
+
+model Batch {
+  id                   String                 @id @default(uuid())
+  batchNumber          String                 @unique
+  sellerId             String
+  seller               Company                @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  
+  // Strict NUMERIC precision for CO2 tonnages & purity
+  capturedQuantity     Decimal                @db.Decimal(14, 4)
+  allocatedQuantity    Decimal                @default(0.0000) @db.Decimal(14, 4)
+  availableQuantity    Decimal                @db.Decimal(14, 4)
+  purityPercentage     Decimal                @db.Decimal(5, 2)
+  
+  storagePressureBar   Decimal                @db.Decimal(8, 2)
+  storageTemperatureC Decimal                @db.Decimal(8, 2)
+  locationLat          Decimal                @db.Decimal(10, 7)
+  locationLng          Decimal                @db.Decimal(10, 7)
+  status               BatchStatus            @default(ACTIVE)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  listings             Listing[]
+  certificate          CertificateOfAnalysis?
+  allocations          Allocation[]
+
+  @@index([sellerId])
+  @@index([status, availableQuantity, purityPercentage])
+}
+
+model Listing {
+  id            String        @id @default(uuid())
+  batchId       String
+  batch         Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sellerId      String
+  seller        Company       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sellingMethod SellingMethod
+  quantity      Decimal       @default(0.0000) @db.Decimal(14, 4)
+  pricePerTon   Decimal?      @db.Decimal(12, 2)
+  status        ListingStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  auction       Auction?
+
+  @@index([batchId])
+  @@index([sellerId])
+  @@index([status, sellingMethod])
+}
+
+model Requirement {
+  id                   String            @id @default(uuid())
+  buyerId              String
+  buyer                Company           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  targetQuantity       Decimal           @db.Decimal(14, 4)
+  minPurity            Decimal           @db.Decimal(5, 2)
+  deliveryLat          Decimal           @db.Decimal(10, 7)
+  deliveryLng          Decimal           @db.Decimal(10, 7)
+  deliveryAddress      String
+  requiredDeliveryDate DateTime?
+  budgetCeilingPerTon  Decimal?          @db.Decimal(12, 2)
+  intendedApplication  String?
+  status               RequirementStatus @default(OPEN)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([buyerId])
+  @@index([status, minPurity])
+}
+
+model Auction {
+  id                 String        @id @default(uuid())
+  listingId          String        @unique
+  listing            Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  batchId            String
+  sellerId           String
+  seller             Company       @relation("SellerAuctions", fields: [sellerId], references: [id], onDelete: Cascade)
+  quantity           Decimal?      @db.Decimal(14, 4)
+  baseReservePrice   Decimal       @db.Decimal(12, 2)
+  currentHighestBid  Decimal       @db.Decimal(12, 2)
+  minBidIncrement    Decimal       @default(50.00) @db.Decimal(12, 2)
+  openingTime        DateTime      @default(now())
+  closingTime        DateTime
+  status             AuctionStatus @default(OPEN)
+  winningBidId       String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  bids               Bid[]
+
+  @@index([sellerId])
+  @@index([status, closingTime])
+}
+
+model Bid {
+  id           String   @id @default(uuid())
+  auctionId    String
+  auction      Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  buyerId      String
+  buyer        User     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  amountPerTon Decimal  @db.Decimal(12, 2)
+  createdAt    DateTime @default(now())
+
+  @@index([auctionId, amountPerTon])
+  @@index([buyerId])
+}
+
+model Order {
+  id            String             @id @default(uuid())
+  orderNumber   String             @unique
+  orderType     OrderType
+  buyerId       String
+  buyer         Company            @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Cascade)
+  totalQuantity Decimal            @db.Decimal(14, 4)
+  totalPrice    Decimal            @db.Decimal(14, 2)
+  overallStatus OrderOverallStatus @default(CONFIRMED)
+  requirementId String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  allocations   Allocation[]
+  shipments     Shipment[]
+
+  @@index([buyerId])
+  @@index([overallStatus])
+}
+
+model Allocation {
+  id                String    @id @default(uuid())
+  orderId           String
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  batchId           String
+  batch             Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sellerId          String
+  seller            Company   @relation("SellerAllocations", fields: [sellerId], references: [id], onDelete: Cascade)
+  allocatedQuantity Decimal   @db.Decimal(14, 4)
+  pricePerTon       Decimal   @db.Decimal(12, 2)
+  createdAt         DateTime  @default(now())
+
+  shipment          Shipment?
+
+  @@index([orderId])
+  @@index([batchId])
+  @@index([sellerId])
+}
+
+model Shipment {
+  id               String                   @id @default(uuid())
+  orderId          String
+  order            Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  allocationId     String                   @unique
+  allocation       Allocation               @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  sellerId         String
+  seller           Company                  @relation("SellerShipments", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyerId          String
+  buyer            Company                  @relation("BuyerShipments", fields: [buyerId], references: [id], onDelete: Cascade)
+  individualStatus ShipmentIndividualStatus @default(ALLOCATED)
+  originLat        Decimal                  @db.Decimal(10, 7)
+  originLng        Decimal                  @db.Decimal(10, 7)
+  destinationLat   Decimal                  @db.Decimal(10, 7)
+  destinationLng   Decimal                  @db.Decimal(10, 7)
+  trackingNotes    String?
+  dispatchedAt     DateTime?
+  deliveredAt      DateTime?
+  receivedAt       DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([orderId])
+  @@index([sellerId, individualStatus])
+  @@index([buyerId, individualStatus])
+}
+
+model CertificateOfAnalysis {
+  id         String    @id @default(uuid())
+  batchId    String    @unique
+  batch      Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileUrl    String
+  fileSize   Int
+  mimeType   String
+  status     CoAStatus @default(CERTIFICATE_UPLOADED)
+  uploadedAt DateTime  @default(now())
+
+  @@index([batchId])
+}
+
+model IdempotencyKey {
+  id              String   @id @default(uuid())
+  key             String   @unique
+  requestPath     String
+  responseCode    Int
+  responsePayload String   @db.Text
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  @@index([key, expiresAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  metadata   String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}

@@ -1,0 +1,20 @@
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.page-header h2 {
+  font-size: var(--text-2xl);
+}
+
+.dashboard-metrics {
+  margin-bottom: var(--space-8);
+}
+
+.data-table-wrap {
+  overflow-x: auto;
+}
