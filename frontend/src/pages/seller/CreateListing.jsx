@@ -357,61 +357,100 @@ export function CreateListing() {
             </div>
           )}
 
-          {/* ML Price Intelligence Section */}
+          {/* AI Price Intelligence Section */}
           {(mlPrice || mlLoading) && (
             <div
               className="card"
               style={{
                 marginBottom: 'var(--space-4)',
-                background: 'rgba(59, 130, 246, 0.04)',
+                background: 'rgba(59, 130, 246, 0.03)',
                 border: '1px solid rgba(59, 130, 246, 0.25)',
                 borderRadius: 'var(--radius-md, 8px)',
-                padding: 'var(--space-3) var(--space-4)',
+                padding: 'var(--space-4)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: '#2563eb', letterSpacing: '0.04em' }}>
-                    ML PRICE INTELLIGENCE
+                  <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: '#2563eb', letterSpacing: '0.05em' }}>
+                    AI PRICE INTELLIGENCE
                   </span>
                   <span className="badge" style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>
-                    ML Prediction
+                    XGBoost Model
                   </span>
                 </div>
                 {mlPrice?.predictedPricePerTonne && mlPrice?.modelAvailable && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '11px', padding: '2px 8px', color: '#2563eb' }}
-                    onClick={() => {
-                      const targetField = listingType === 'FIXED' ? 'pricePerUnit' : 'reservePrice';
-                      setForm(prev => ({ ...prev, [targetField]: String(Math.round(mlPrice.predictedPricePerTonne)) }));
-                      setFieldErrors(prev => ({ ...prev, [targetField]: undefined }));
-                    }}
-                  >
-                    Apply ₹{Math.round(mlPrice.predictedPricePerTonne).toLocaleString()}/T
-                  </button>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 10px' }}
+                      onClick={() => {
+                        const targetField = listingType === 'FIXED' ? 'pricePerUnit' : 'reservePrice';
+                        setForm(prev => ({ ...prev, [targetField]: String(Math.round(mlPrice.predictedPricePerTonne)) }));
+                        setFieldErrors(prev => ({ ...prev, [targetField]: undefined }));
+                      }}
+                    >
+                      Use Suggested Price (₹{Math.round(mlPrice.predictedPricePerTonne).toLocaleString()}/T)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 8px', color: '#2563eb' }}
+                      onClick={() => {
+                        const targetField = listingType === 'FIXED' ? 'pricePerUnit' : 'reservePrice';
+                        const el = document.querySelector(`input[name="${targetField}"]`) || document.querySelector('.input[type="number"]');
+                        if (el) el.focus();
+                      }}
+                    >
+                      Modify Price
+                    </button>
+                  </div>
                 )}
               </div>
 
               {mlLoading ? (
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 'var(--space-2) 0' }}>
-                  Computing XGBoost price inference...
+                  Computing XGBoost price intelligence...
                 </div>
               ) : mlPrice?.modelAvailable && mlPrice?.predictedPricePerTonne ? (
-                <>
-                  <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 'var(--space-1) 0', color: 'var(--color-text-primary)' }}>
-                    Predicted price: <span style={{ color: '#2563eb' }}>₹{mlPrice.predictedPricePerTonne.toLocaleString()}</span> <span style={{ fontSize: 'var(--text-xs)', fontWeight: 400, color: 'var(--color-text-muted)' }}>/ Tonne</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggested Price</div>
+                    <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      ₹{mlPrice.predictedPricePerTonne.toLocaleString()} <span style={{ fontSize: 'var(--text-xs)', fontWeight: 400, color: 'var(--color-text-muted)' }}>/ tonne</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                    {mlPrice.mae && <span>• Validation MAE: ±₹{mlPrice.mae}/T</span>}
-                    {mlPrice.r2 && <span>• Model R²: {mlPrice.r2}</span>}
-                    <span>• XGBoost Regression</span>
+
+                  {mlPrice.errorBand && (
+                    <div style={{ background: 'rgba(255, 255, 255, 0.5)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af' }}>
+                        {mlPrice.errorBand.label}: ₹{mlPrice.errorBand.min.toLocaleString()} – ₹{mlPrice.errorBand.max.toLocaleString()} / tonne
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                        {mlPrice.errorBand.note}
+                      </div>
+                    </div>
+                  )}
+
+                  {mlPrice.whyBullets && mlPrice.whyBullets.length > 0 && (
+                    <div style={{ marginTop: 'var(--space-1)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '4px' }}>Why?</div>
+                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        {mlPrice.whyBullets.map((bullet, bIdx) => (
+                          <li key={bIdx}>{bullet}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)', paddingTop: 'var(--space-2)', marginTop: 'var(--space-1)', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                    <div><strong>Model:</strong> {mlPrice.modelName || 'XGBoost Price Prediction'}</div>
+                    <div>{mlPrice.provenance || 'R² 0.9689 on synthetic validation data. Prototype trained on synthetic data; real transaction data will improve future predictions.'}</div>
                   </div>
-                </>
+                </div>
               ) : (
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-1)' }}>
-                  ML prediction unavailable — insufficient historical data.
+                  ML price prediction unavailable — insufficient historical data. Displaying rule-based industrial benchmark corridor.
                 </div>
               )}
             </div>

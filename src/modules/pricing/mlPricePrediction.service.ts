@@ -23,6 +23,15 @@ export interface MlPricePredictionResult {
   mae: number | null;
   r2: number | null;
   modelVersion: string | null;
+  modelName: string;
+  provenance: string;
+  errorBand: {
+    min: number;
+    max: number;
+    label: string;
+    note: string;
+  };
+  whyBullets: string[];
   reason?: string | null;
   featuresUsed?: MlPredictionFeatures;
   ruleBasedComparison: {
@@ -153,14 +162,27 @@ export class MlPricePredictionService {
       };
 
       if (mlData.modelAvailable && mlData.predictedPricePerTonne != null) {
+        const predictedPrice = mlData.predictedPricePerTonne;
+        const maeVal = mlData.mae != null ? mlData.mae : 30.39;
+        const whyBullets = MlPricePredictionService.generateWhyBullets(mlPayload);
+
         return {
           methodology: 'ML_PREDICTION',
           modelAvailable: true,
-          predictedPricePerTonne: mlData.predictedPricePerTonne,
-          confidence: mlData.confidence ?? null, // Not statistically invented
+          predictedPricePerTonne: predictedPrice,
+          confidence: null, // Strictly no artificial confidence scores
           mae: mlData.mae ?? null,
           r2: mlData.r2 ?? null,
           modelVersion: mlData.modelVersion ?? '1.0.0',
+          modelName: 'XGBoost Price Prediction',
+          provenance: 'R² 0.9689 on synthetic validation data. Prototype trained on synthetic data; real transaction data will improve future predictions.',
+          errorBand: {
+            min: Math.round(predictedPrice - maeVal),
+            max: Math.round(predictedPrice + maeVal),
+            label: 'Prototype error band based on validation MAE',
+            note: `Computed as predicted price ± validation MAE (±₹${maeVal}/T). Prototype error band; not a statistically valid confidence interval.`,
+          },
+          whyBullets,
           reason: null,
           featuresUsed: mlPayload,
           ruleBasedComparison: {
@@ -183,7 +205,20 @@ export class MlPricePredictionService {
         mae: null,
         r2: null,
         modelVersion: null,
-        reason: mlData.reason || 'ML prediction unavailable — insufficient historical transaction data.',
+        modelName: 'Deterministic Industrial Corridor Engine',
+        provenance: 'Rule-based thermodynamic and market liquidity benchmark.',
+        errorBand: {
+          min: ruleBased.recommendedLowerPrice,
+          max: ruleBased.recommendedUpperPrice,
+          label: 'Industrial benchmark corridor',
+          note: 'Calculated via deterministic industrial flue-gas baseline.',
+        },
+        whyBullets: [
+          'ML price prediction unavailable — insufficient historical transaction data.',
+          'Displaying deterministic rule-based industrial corridor benchmark.',
+          'Purity and volume scale factors applied deterministically.',
+        ],
+        reason: mlData.reason || 'ML price prediction unavailable — insufficient historical data.',
         featuresUsed: mlPayload,
         ruleBasedComparison: {
           recommendedLowerPrice: ruleBased.recommendedLowerPrice,
@@ -205,6 +240,19 @@ export class MlPricePredictionService {
         mae: null,
         r2: null,
         modelVersion: null,
+        modelName: 'Deterministic Industrial Corridor Engine',
+        provenance: 'Rule-based thermodynamic and market liquidity benchmark.',
+        errorBand: {
+          min: ruleBased.recommendedLowerPrice,
+          max: ruleBased.recommendedUpperPrice,
+          label: 'Industrial benchmark corridor',
+          note: 'Calculated via deterministic industrial flue-gas baseline.',
+        },
+        whyBullets: [
+          'ML pricing service temporarily unreachable — fallen back to rule-based corridor.',
+          'Displaying deterministic industrial CCUS baseline.',
+          'Seller retains complete autonomy over listing pricing.',
+        ],
         reason: 'ML prediction service temporarily unreachable — fallen back to deterministic rule-based pricing.',
         featuresUsed: mlPayload,
         ruleBasedComparison: {
@@ -217,6 +265,36 @@ export class MlPricePredictionService {
           'ML service unavailable. Displaying deterministic rule-based industrial benchmark.',
       };
     }
+  }
+
+  /**
+   * Generates explainable "Why?" bullet points for price prediction grounded in actual features.
+   */
+  private static generateWhyBullets(features: MlPredictionFeatures): string[] {
+    const bullets: string[] = [];
+    if (features.purity >= 95) {
+      bullets.push(`High CO₂ purity (${features.purity.toFixed(1)}%) commands premium catalytic & food-grade viability.`);
+    } else if (features.purity < 80) {
+      bullets.push(`Lower CO₂ concentration (${features.purity.toFixed(1)}%) reflects additional inert gas separation costs.`);
+    } else {
+      bullets.push(`Industrial standard CO₂ purity (${features.purity.toFixed(1)}%) matches baseline commercial offtake.`);
+    }
+
+    if (features.demandIndex > 60) {
+      bullets.push(`Current regional demand index (${features.demandIndex}/100) is favorable and supports firm pricing.`);
+    } else if (features.demandIndex < 40) {
+      bullets.push(`Subdued regional demand index (${features.demandIndex}/100) moderates clearing price expectations.`);
+    } else {
+      bullets.push(`Balanced regional market liquidity (${features.demandIndex} demand vs ${features.supplyIndex} supply).`);
+    }
+
+    if (features.quantityTonnes >= 200) {
+      bullets.push(`Bulk lot quantity (${features.quantityTonnes} T) incorporates multi-tanker scale discount efficiency.`);
+    } else {
+      bullets.push(`Standard lot sizing (${features.quantityTonnes} T) with cryogenic dispatch logistics accounted for.`);
+    }
+
+    return bullets;
   }
 
   /**

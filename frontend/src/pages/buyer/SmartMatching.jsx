@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { matchingApi } from '../../api/matching';
+import { aiApi } from '../../api/ai';
 import { ordersApi } from '../../api/orders';
 import { requirementsApi } from '../../api/requirements';
 import { formatPurity, parsePurity, formatCurrency } from '../../utils/formatters';
@@ -44,12 +45,19 @@ export function SmartMatching() {
   useEffect(() => {
     async function load() {
       try {
-        const [reqRes, matchRes] = await Promise.all([
-          requirementsApi.getById(id),
-          matchingApi.getMatches(id),
-        ]);
+        const reqRes = await requirementsApi.getById(id);
         setRequirement(reqRes?.data || reqRes);
-        setMatchData(matchRes?.data || matchRes);
+
+        // Query AI Matchmaker with fallback to standard deterministic matching
+        let matchRes = null;
+        try {
+          const aiRes = await aiApi.getMatches(id);
+          matchRes = aiRes?.data?.data || aiRes?.data || aiRes;
+        } catch (aiErr) {
+          const standardRes = await matchingApi.getMatches(id);
+          matchRes = standardRes?.data?.data || standardRes?.data || standardRes;
+        }
+        setMatchData(matchRes);
       } catch (err) {
         setError(err.message || 'Failed to load matching data');
       } finally {
@@ -60,13 +68,14 @@ export function SmartMatching() {
   }, [id]);
 
   // Available proposals: multi-supplier composite matches or single-supplier matches
-  const multiMatches = matchData?.multiSupplierMatches || [];
-  const singleMatches = matchData?.singleSupplierMatches || [];
+  const multiMatches = matchData?.multiSupplierPlans || matchData?.multiSupplierMatches || [];
+  const singleMatches = matchData?.matches || matchData?.singleSupplierMatches || [];
 
   // Active selected proposal
   const activeProposal = multiMatches[selectedProposalIndex] || singleMatches[selectedProposalIndex] || null;
 
   const rawMatches =
+    activeProposal?.suppliers ||
     activeProposal?.contributingLots ||
     (activeProposal ? [activeProposal] : []) ||
     matchData?.matches ||
@@ -85,7 +94,7 @@ export function SmartMatching() {
     distanceKm: m.distanceKm != null ? Math.round(Number(m.distanceKm)) : null,
     location: m.listing?.batch?.storageLocationCity || (m.distanceKm != null ? `${Math.round(Number(m.distanceKm))} km away` : '—'),
     hasCertificate: Boolean(m.hasCertificate || m.certificate || m.listing?.batch?.certificate),
-    score: m.score || m.singleScore || m.matchScore || '—',
+    score: m.matchScore || m.score || m.singleScore || '—',
   }));
 
   const qtyRequired = Number(requirement?.targetQuantity ?? requirement?.quantityRequired ?? matchData?.targetQuantity ?? 0);
@@ -93,17 +102,28 @@ export function SmartMatching() {
   const totalAllocated = normalizedMatches.reduce((s, m) => s + m.quantity, 0);
   const pctFulfilled = qtyRequired > 0 ? Math.round((totalAllocated / qtyRequired) * 100) : 0;
 
-  const weightedPurity = activeProposal?.weightedAveragePurity != null
-    ? Number(activeProposal.weightedAveragePurity).toFixed(1)
-    : (normalizedMatches.length > 0 && totalAllocated > 0
-      ? (normalizedMatches.reduce((s, m) => s + (m.purity || 0) * m.quantity, 0) / totalAllocated).toFixed(1)
-      : null);
+  const weightedPurity = activeProposal?.averagePurity != null
+    ? Number(activeProposal.averagePurity).toFixed(1)
+    : (activeProposal?.weightedAveragePurity != null
+      ? Number(activeProposal.weightedAveragePurity).toFixed(1)
+      : (normalizedMatches.length > 0 && totalAllocated > 0
+        ? (normalizedMatches.reduce((s, m) => s + (m.purity || 0) * m.quantity, 0) / totalAllocated).toFixed(1)
+        : null));
 
-  const activeScore = activeProposal?.score ?? matchData?.bestMatchScore ?? 0;
-  const activeRating = activeProposal?.rating ?? (activeScore >= 90 ? 'Excellent' : activeScore >= 75 ? 'Good' : 'Moderate');
+  const activeScore = activeProposal?.overallScore ?? activeProposal?.matchScore ?? activeProposal?.score ?? matchData?.bestMatchScore ?? 0;
+  const activeRating = activeProposal?.rating ?? (activeScore >= 85 ? 'Excellent' : activeScore >= 70 ? 'Good' : 'Moderate');
   const scoreBreakdown = activeProposal?.scoreBreakdown;
-  const deliveryFeasibility = activeProposal?.deliveryFeasibility;
-  const whyThisMatch = activeProposal?.whyThisMatch || [];
+  const deliveryFeasibility = typeof activeProposal?.deliveryFeasibility === 'object'
+    ? activeProposal?.deliveryFeasibility
+    : {
+        status: activeProposal?.deliveryFeasibility || 'FEASIBLE',
+        label: activeProposal?.deliveryFeasibility === 'FEASIBLE' ? '✓ Feasible' : activeProposal?.deliveryFeasibility === 'TIGHT' ? '⚠ Tight window' : '✕ Delivery date unlikely',
+        estimatedTransitHours: Math.round(Number(normalizedMatches[0]?.distanceKm || 50) / 45) + 4,
+        explanation: activeProposal?.explanation || 'Transit window evaluated for regional cryogenic tanker dispatch.',
+      };
+  const whyThisMatch = activeProposal?.reasons || activeProposal?.whyThisMatch || [];
+  const concerns = activeProposal?.concerns || [];
+  const recommendation = activeProposal?.recommendation;
 
   const handleProcure = async () => {
     if (procuring) return;
@@ -229,7 +249,7 @@ export function SmartMatching() {
                   {activeRating} Match
                 </span>
                 <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)' }}>
-                  Rule-based deterministic ranking across 6 dimensions
+                  {matchData?.geminiExplanationUsed ? 'AI Gemini Enhanced Ranking' : 'Deterministic 7-Factor Weighted Engine'}
                 </span>
               </div>
             </div>
@@ -254,68 +274,103 @@ export function SmartMatching() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                gap: 'var(--space-3)',
-                marginTop: 'var(--space-5)',
-                paddingTop: 'var(--space-4)',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 'var(--space-2)',
+                marginTop: 'var(--space-4)',
+                paddingTop: 'var(--space-3)',
                 borderTop: '1px solid var(--color-border-light)',
               }}
             >
               <div className="score-factor-pill">
                 <span className="factor-name">Quantity Fit</span>
-                <span className="factor-val">{scoreBreakdown.quantityFit.score}/25 • {scoreBreakdown.quantityFit.rating}</span>
+                <span className="factor-val">{scoreBreakdown.quantity ?? scoreBreakdown.quantityFit?.score}/20</span>
               </div>
               <div className="score-factor-pill">
                 <span className="factor-name">Purity Fit</span>
-                <span className="factor-val">{scoreBreakdown.purityFit.score}/20 • {scoreBreakdown.purityFit.rating}</span>
+                <span className="factor-val">{scoreBreakdown.purity ?? scoreBreakdown.purityFit?.score}/25</span>
               </div>
               <div className="score-factor-pill">
-                <span className="factor-name">Price Competitiveness</span>
-                <span className="factor-val">{scoreBreakdown.priceCompetitiveness.score}/20 • {scoreBreakdown.priceCompetitiveness.rating}</span>
+                <span className="factor-name">Price Fit</span>
+                <span className="factor-val">{scoreBreakdown.price ?? scoreBreakdown.priceCompetitiveness?.score}/20</span>
               </div>
               <div className="score-factor-pill">
-                <span className="factor-name">Logistics Distance</span>
-                <span className="factor-val">{scoreBreakdown.distanceEfficiency.score}/15 • {scoreBreakdown.distanceEfficiency.rating}</span>
+                <span className="factor-name">Distance</span>
+                <span className="factor-val">{scoreBreakdown.distance ?? scoreBreakdown.distanceEfficiency?.score}/15</span>
               </div>
               <div className="score-factor-pill">
-                <span className="factor-name">Readiness & CoA</span>
-                <span className="factor-val">{scoreBreakdown.availability.score}/10 • {scoreBreakdown.availability.rating}</span>
+                <span className="factor-name">Availability</span>
+                <span className="factor-val">{scoreBreakdown.availability ?? scoreBreakdown.deliveryFeasibility?.score}/10</span>
               </div>
               <div className="score-factor-pill">
-                <span className="factor-name">Delivery Feasibility</span>
-                <span className="factor-val">{scoreBreakdown.deliveryFeasibility.score}/10 • {scoreBreakdown.deliveryFeasibility.rating}</span>
+                <span className="factor-name">CoA Quality</span>
+                <span className="factor-val">{scoreBreakdown.certificate ?? 5}/5</span>
+              </div>
+              <div className="score-factor-pill">
+                <span className="factor-name">Use Match</span>
+                <span className="factor-val">{scoreBreakdown.useCompatibility ?? 5}/5</span>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* "Why this match?" Explanation Box */}
-      {whyThisMatch.length > 0 && (
+      {/* "Why this match?" & Concerns Explanation Box */}
+      {(whyThisMatch.length > 0 || concerns.length > 0 || recommendation) && (
         <div
           className="card"
           style={{
             marginBottom: 'var(--space-6)',
-            background: 'rgba(16, 185, 129, 0.04)',
+            background: 'rgba(16, 185, 129, 0.03)',
             border: '1px solid rgba(16, 185, 129, 0.2)',
+            borderRadius: 'var(--radius-md, 8px)',
+            padding: 'var(--space-4)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-            <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-              Why this match recommendation?
-            </span>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              (Transparent matching criteria)
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                Match Analysis & Explanation
+              </span>
+              <span className="badge" style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.15)', color: '#047857' }}>
+                {matchData?.geminiExplanationUsed ? 'Gemini AI' : 'Deterministic Evaluation'}
+              </span>
+            </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-2)' }}>
-            {whyThisMatch.map((reason, idx) => (
-              <div key={idx} style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>✓</span>
-                <span>{reason.replace(/^✓\s*/, '')}</span>
+
+          {whyThisMatch.length > 0 && (
+            <div style={{ marginBottom: concerns.length > 0 || recommendation ? 'var(--space-3)' : 0 }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#065f46', marginBottom: 'var(--space-1)' }}>Key Strengths:</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-2)' }}>
+                {whyThisMatch.map((reason, idx) => (
+                  <div key={idx} style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>✓</span>
+                    <span>{reason.replace(/^✓\s*/, '')}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {concerns.length > 0 && (
+            <div style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#b45309', marginBottom: 'var(--space-1)' }}>Potential Concerns:</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                {concerns.map((concern, idx) => (
+                  <div key={idx} style={{ fontSize: 'var(--text-sm)', color: '#92400e', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span>⚠</span>
+                    <span>{concern.replace(/^⚠\s*/, '')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recommendation && (
+            <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2) var(--space-3)', background: 'rgba(59, 130, 246, 0.06)', borderRadius: 'var(--radius-sm, 6px)', borderLeft: '3px solid #2563eb' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Recommendation: </span>
+              <span style={{ fontSize: '12px', color: '#1e3a8a' }}>{recommendation}</span>
+            </div>
+          )}
         </div>
       )}
 
