@@ -19,7 +19,7 @@ const SELLER_LINKS = [
   { to: '/seller/auctions', icon: 'trending-up', label: 'Auctions' },
   { to: '/seller/orders', icon: 'file-text', label: 'Orders' },
   { to: '/seller/shipments', icon: 'truck', label: 'Shipments' },
-  { to: '/seller/logistics', icon: 'git-branch', label: 'Logistics' },
+  { to: '/seller/logistics', icon: 'git-branch', label: 'Smart Logistics' },
   { to: '/seller/documents', icon: 'folder', label: 'Documents' },
 ];
 
