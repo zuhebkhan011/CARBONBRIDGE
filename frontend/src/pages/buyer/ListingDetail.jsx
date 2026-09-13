@@ -7,6 +7,7 @@ import { pricingApi } from '../../api/pricing';
 import { documentsApi } from '../../api/documents';
 import { useAuth } from '../../context/AuthContext';
 import { formatBatchPurity } from '../../utils/formatters';
+import { resolveLocationCoordinates } from '../../utils/geo';
 
 export function ListingDetail() {
   const { id } = useParams();
@@ -68,9 +69,14 @@ export function ListingDetail() {
   // Pre-fill user company delivery defaults
   useEffect(() => {
     if (user?.company) {
-      if (user.company.address) setDeliveryAddress(user.company.address);
-      if (user.company.latitude != null) setDeliveryLat(Number(user.company.latitude));
-      if (user.company.longitude != null) setDeliveryLng(Number(user.company.longitude));
+      const resolved = resolveLocationCoordinates(
+        user.company.address,
+        user.company.latitude,
+        user.company.longitude
+      );
+      setDeliveryAddress(user.company.address || `${resolved.city}, ${resolved.state}`);
+      setDeliveryLat(resolved.latitude);
+      setDeliveryLng(resolved.longitude);
     }
   }, [user]);
 

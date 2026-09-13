@@ -9,6 +9,8 @@ import { UpdateShipmentStatusInput } from './shipments.dto.js';
 import { AuditService } from '../audit/audit.service.js';
 import { NotificationService } from '../notifications/notification.service.js';
 import { OrdersService } from '../orders/orders.service.js';
+import { RouteService } from '../logistics/route.service.js';
+import { resolveLocationCoordinates, calculateEstimatedProgress } from '../../common/utils/geo.js';
 
 // Strict state transition lookup table
 const VALID_TRANSITIONS: Record<
@@ -142,37 +144,84 @@ export class ShipmentsService {
     });
   }
 
+  private static async enrichShipment(s: any) {
+    if (!s) return s;
+    if (s.individualStatus !== ShipmentIndividualStatus.IN_TRANSIT) {
+      return {
+        ...s,
+        estimatedProgress: null,
+      };
+    }
+
+    try {
+      const sellerAddr = s.seller?.address || '';
+      const buyerAddr = s.buyer?.address || '';
+      const origin = resolveLocationCoordinates(
+        sellerAddr,
+        s.originLat != null ? Number(s.originLat) : undefined,
+        s.originLng != null ? Number(s.originLng) : undefined
+      );
+      const destination = resolveLocationCoordinates(
+        buyerAddr,
+        s.destinationLat != null ? Number(s.destinationLat) : undefined,
+        s.destinationLng != null ? Number(s.destinationLng) : undefined
+      );
+      const route = await RouteService.getPointToPointRoadRoute(origin, destination);
+      const estimatedProgress = calculateEstimatedProgress({
+        dispatchedAt: s.dispatchedAt,
+        durationHours: route.durationHours,
+        distanceKm: route.distanceKm,
+        geometry: route.geometry,
+      });
+
+      return {
+        ...s,
+        distanceKm: route.distanceKm,
+        durationHours: route.durationHours,
+        estimatedProgress,
+      };
+    } catch {
+      return {
+        ...s,
+        estimatedProgress: null,
+      };
+    }
+  }
+
   public static async listShipments(companyId: string, role: Role) {
+    let shipments: any[] = [];
     if (role === Role.SELLER) {
-      return prisma.shipment.findMany({
+      shipments = await prisma.shipment.findMany({
         where: { sellerId: companyId },
         include: {
           allocation: { include: { batch: true } },
           buyer: { select: { id: true, name: true, address: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
-    }
-
-    if (role === Role.BUYER) {
-      return prisma.shipment.findMany({
-        where: { buyerId: companyId },
-        include: {
-          allocation: { include: { batch: true } },
           seller: { select: { id: true, name: true, address: true } },
         },
         orderBy: { updatedAt: 'desc' },
       });
+    } else if (role === Role.BUYER) {
+      shipments = await prisma.shipment.findMany({
+        where: { buyerId: companyId },
+        include: {
+          allocation: { include: { batch: true } },
+          seller: { select: { id: true, name: true, address: true } },
+          buyer: { select: { id: true, name: true, address: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+    } else {
+      shipments = await prisma.shipment.findMany({
+        include: {
+          allocation: { include: { batch: true } },
+          seller: true,
+          buyer: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
     }
 
-    return prisma.shipment.findMany({
-      include: {
-        allocation: { include: { batch: true } },
-        seller: true,
-        buyer: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    return Promise.all(shipments.map((s) => ShipmentsService.enrichShipment(s)));
   }
 
   public static async getShipmentById(shipmentId: string, companyId: string, role: Role) {
@@ -198,6 +247,7 @@ export class ShipmentsService {
       throw new ForbiddenError('You do not have permission to view this shipment.');
     }
 
-    return shipment;
+    return ShipmentsService.enrichShipment(shipment);
   }
 }
+

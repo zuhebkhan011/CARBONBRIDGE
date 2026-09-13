@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { auctionsApi } from '../../api/auctions';
 import { useAuth } from '../../context/AuthContext';
 import { formatMoney, formatQuantity } from '../../utils/formatters';
+import { resolveLocationCoordinates } from '../../utils/geo';
 
 export function AuctionDetail() {
   const { id } = useParams();
@@ -102,10 +103,13 @@ export function AuctionDetail() {
         .slice()
         .sort((a, b) => Number(b.amountPerTon ?? b.bidAmount ?? 0) - Number(a.amountPerTon ?? a.bidAmount ?? 0))[0];
       if (winningBid) {
+        const buyerCompany = winningBid.buyerCompany || winningBid.buyer?.company;
+        const address = buyerCompany?.address || 'Ahmedabad, Gujarat';
+        const resolved = resolveLocationCoordinates(address, buyerCompany?.latitude, buyerCompany?.longitude);
         await auctionsApi.finalize(id, {
-          deliveryLat: 20.5938,
-          deliveryLng: 78.9629,
-          deliveryAddress: 'CarbonBridge Hub, India',
+          deliveryLat: resolved.latitude,
+          deliveryLng: resolved.longitude,
+          deliveryAddress: address,
         });
         await loadAuction();
       }

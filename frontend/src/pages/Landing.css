@@ -141,11 +141,12 @@
 /* ── Problem Cards ──────────────────────────────────────────── */
 .landing-section-alt {
   background: var(--neutral-75);
+  scroll-margin-top: 72px;
 }
 
 .problem-card {
   position: relative;
-  padding-top: var(--space-12);
+  padding-top: var(--space-16);
 }
 
 .problem-number {

@@ -76,8 +76,8 @@ export function Landing() {
               <div className="flow-node flow-bridge">
                 <div className="flow-icon flow-icon-bridge">
                   <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-                    <path d="M16 6L22 12L16 18L10 12Z" fill="var(--color-primary)" opacity="0.9"/>
-                    <path d="M16 14L22 20L16 26L10 20Z" fill="var(--color-primary)" opacity="0.5"/>
+                    <path d="M16 6L22 12L16 18L10 12Z" fill="white" opacity="0.9"/>
+                    <path d="M16 14L22 20L16 26L10 20Z" fill="white" opacity="0.5"/>
                   </svg>
                 </div>
                 <span>CarbonBridge</span>

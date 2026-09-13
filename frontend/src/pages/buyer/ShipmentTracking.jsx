@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { shipmentsApi } from '../../api/shipments';
 import { formatStatus, getShipmentStatus, formatTonnage, formatBatchPurity } from '../../utils/formatters';
+import { calculateEstimatedProgress } from '../../utils/geo';
 
 const STATUS_ORDER = ['ALLOCATED', 'DISPATCH_PENDING', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED'];
 
@@ -190,6 +191,165 @@ export function ShipmentTracking() {
                     );
                   })}
                 </div>
+
+                {/* In-Transit Estimated Progress Section */}
+                {status === 'IN_TRANSIT' && (() => {
+                  const progress =
+                    ship.estimatedProgress ||
+                    calculateEstimatedProgress({
+                      dispatchedAt: ship.dispatchedAt,
+                      durationHours: ship.durationHours,
+                      distanceKm: ship.distanceKm,
+                    });
+
+                  return (
+                    <div
+                      style={{
+                        margin: 'var(--space-4) 0',
+                        padding: 'var(--space-4)',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px',
+                          flexWrap: 'wrap',
+                          gap: '6px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '1.1rem' }}>🚚</span>
+                          <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
+                            Estimated Shipment Progress
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#92400e',
+                            background: '#fef3c7',
+                            border: '1px solid #fde68a',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          GPS tracking unavailable
+                        </span>
+                      </div>
+
+                      {progress?.isCalculable ? (
+                        <>
+                          {/* Progress track with indicator */}
+                          <div style={{ position: 'relative', margin: '14px 0 8px 0' }}>
+                            <div
+                              style={{
+                                height: '8px',
+                                width: '100%',
+                                background: '#e2e8f0',
+                                borderRadius: '4px',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  height: '100%',
+                                  width: `${progress.progressPercentage}%`,
+                                  background: 'linear-gradient(90deg, #10b981, #059669)',
+                                  borderRadius: '4px',
+                                  transition: 'width 0.4s ease',
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: `${progress.progressPercentage}%`,
+                                transform: 'translate(-50%, -50%)',
+                                width: '14px',
+                                height: '14px',
+                                borderRadius: '50%',
+                                background: '#059669',
+                                border: '2px solid #ffffff',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                              }}
+                            />
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              fontSize: '11px',
+                              color: 'var(--color-text-muted)',
+                              marginBottom: '10px',
+                            }}
+                          >
+                            <span>0%</span>
+                            <span style={{ fontWeight: 700, color: '#059669' }}>
+                              {progress.progressPercentage}%
+                            </span>
+                            <span>100%</span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: '8px',
+                              fontSize: 'var(--text-xs)',
+                            }}
+                          >
+                            <div>
+                              {progress.distanceCoveredKm != null ? (
+                                <span>
+                                  <strong>~{progress.distanceCoveredKm} km covered</strong> &middot;{' '}
+                                  <span>~{progress.distanceRemainingKm} km remaining</span>
+                                </span>
+                              ) : (
+                                <span>Progress: {progress.progressPercentage}% estimated</span>
+                              )}
+                            </div>
+                            <div>
+                              <span>Estimated arrival: </span>
+                              <strong style={{ color: '#0f172a' }}>{progress.etaText}</strong>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--color-text-muted)',
+                            marginTop: '6px',
+                          }}
+                        >
+                          <span>Estimated progress unavailable &middot; ETA unavailable</span>
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          marginTop: '8px',
+                          fontSize: '11px',
+                          color: '#64748b',
+                          borderTop: '1px dashed #e2e8f0',
+                          paddingTop: '6px',
+                        }}
+                      >
+                        Position estimated from dispatch timestamp and planned road route. No live GPS telematics.
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {status === 'DELIVERED' && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

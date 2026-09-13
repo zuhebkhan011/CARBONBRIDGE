@@ -123,13 +123,55 @@ export class CostService {
   }
 
   /**
+   * Aggregates cost breakdowns across multiple trips into a single unified candidate breakdown,
+   * guaranteeing 100% mathematical consistency (sum of individual trips === candidate total).
+   */
+  public static aggregateTripCostBreakdowns(
+    trips: { totalDistanceKm: number; totalDurationHours: number; costBreakdown: CostBreakdown }[],
+    totalQuantityTonnes: number
+  ): CostBreakdown {
+    const totalDistanceKm = Math.round(trips.reduce((sum, t) => sum + t.totalDistanceKm, 0) * 100) / 100;
+    const totalDurationHours = Math.round(trips.reduce((sum, t) => sum + t.totalDurationHours, 0) * 10) / 10;
+    const fuelLitres = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.fuelLitres, 0) * 100) / 100;
+    const fuelCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.fuelCost, 0) * 100) / 100;
+    const vehicleOperatingCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.vehicleOperatingCost, 0) * 100) / 100;
+    const driverCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.driverCost, 0) * 100) / 100;
+    const tollCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.tollCost, 0) * 100) / 100;
+    const loadingCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.loadingCost, 0) * 100) / 100;
+    const unloadingCost = Math.round(trips.reduce((sum, t) => sum + t.costBreakdown.unloadingCost, 0) * 100) / 100;
+
+    const totalEstimatedCost = Math.round(
+      (fuelCost + vehicleOperatingCost + driverCost + tollCost + loadingCost + unloadingCost) * 100
+    ) / 100;
+
+    const costPerTonne = totalQuantityTonnes > 0
+      ? Math.round((totalEstimatedCost / totalQuantityTonnes) * 100) / 100
+      : 0;
+
+    return {
+      distanceKm: totalDistanceKm,
+      durationHours: totalDurationHours,
+      fuelLitres,
+      fuelCost,
+      vehicleOperatingCost,
+      driverCost,
+      tollCost,
+      loadingCost,
+      unloadingCost,
+      totalEstimatedCost,
+      costPerTonne,
+    };
+  }
+
+  /**
    * Compares baseline (sum of independent round trips) vs consolidated route
    * Strictly calculates savings ONLY when both are genuinely computed.
    */
   public static calculateBaselineComparison(
     independentTrips: { distanceKm: number; durationHours: number; quantityTonnes: number }[],
     consolidatedCost: CostBreakdown,
-    vehicleConfig?: Partial<VehicleConfig>
+    vehicleConfig?: Partial<VehicleConfig>,
+    consolidatedTripsCount: number = 1
   ): BaselineComparison {
     const cfg = this.resolveVehicleConfig(vehicleConfig);
 
@@ -162,6 +204,8 @@ export class CostService {
         ? Math.round((independentTotalCost / totalQuantityTonnes) * 100) / 100
         : 0;
 
+    const consolidatedDistanceKm = consolidatedCost.distanceKm;
+    const consolidatedHours = consolidatedCost.durationHours;
     const consolidatedTotalCost = consolidatedCost.totalEstimatedCost;
     const consolidatedCostPerTonne = consolidatedCost.costPerTonne;
 
@@ -183,6 +227,9 @@ export class CostService {
       independentHours,
       independentTotalCost,
       independentCostPerTonne,
+      consolidatedTripsCount,
+      consolidatedDistanceKm,
+      consolidatedHours,
       consolidatedTotalCost,
       consolidatedCostPerTonne,
       savingsAmount,

@@ -4,7 +4,8 @@ import { matchingApi } from '../../api/matching';
 import { aiApi } from '../../api/ai';
 import { ordersApi } from '../../api/orders';
 import { requirementsApi } from '../../api/requirements';
-import { formatPurity, parsePurity, formatCurrency } from '../../utils/formatters';
+import { formatPurity, parsePurity } from '../../utils/formatters';
+import { resolveLocationCoordinates } from '../../utils/geo';
 import './SmartMatching.css';
 
 function parseLocation(r) {
@@ -134,11 +135,16 @@ export function SmartMatching() {
         batchId: m.batchId,
         quantity: m.quantity,
       }));
+      const resolved = resolveLocationCoordinates(
+        requirement?.deliveryAddress,
+        requirement?.deliveryLat,
+        requirement?.deliveryLng
+      );
       await ordersApi.procureComposite({
         requirementId: id,
-        deliveryLat: requirement?.deliveryLat != null ? Number(requirement.deliveryLat) : 20.5938,
-        deliveryLng: requirement?.deliveryLng != null ? Number(requirement.deliveryLng) : 78.9629,
-        deliveryAddress: requirement?.deliveryAddress || 'Buyer Warehouse',
+        deliveryLat: resolved.latitude,
+        deliveryLng: resolved.longitude,
+        deliveryAddress: requirement?.deliveryAddress || `${resolved.city}, ${resolved.state}`,
         allocations,
       });
       navigate('/dashboard');

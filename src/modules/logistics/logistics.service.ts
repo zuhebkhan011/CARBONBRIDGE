@@ -188,7 +188,7 @@ export class LogisticsService {
       }));
     }
 
-    return OptimizerService.optimizeRoutes(sellerPlant, stops, input?.vehicle);
+    return await OptimizerService.optimizeRoutes(sellerPlant, stops, input?.vehicle);
   }
 
   /**
@@ -351,7 +351,7 @@ export class LogisticsService {
       orderNumber: s.order.orderNumber,
     }));
 
-    const smartResult = OptimizerService.optimizeRoutes(
+    const smartResult = await OptimizerService.optimizeRoutes(
       { id: seller.id, name: seller.name, address: seller.address, coordinates: originCoord },
       smartStops
     );

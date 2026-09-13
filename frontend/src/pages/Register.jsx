@@ -3,22 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
-const CITY_COORDS = {
-  'Ahmedabad': { lat: 23.0225, lng: 72.5714 },
-  'Mumbai': { lat: 19.076, lng: 72.8777 },
-  'Delhi': { lat: 28.6139, lng: 77.209 },
-  'Bangalore': { lat: 12.9716, lng: 77.5946 },
-  'Chennai': { lat: 13.0827, lng: 80.2707 },
-  'Kolkata': { lat: 22.5726, lng: 88.3639 },
-  'Hyderabad': { lat: 17.385, lng: 78.4867 },
-  'Pune': { lat: 18.5204, lng: 73.8567 },
-  'Surat': { lat: 21.1702, lng: 72.8311 },
-  'Jaipur': { lat: 26.9124, lng: 75.7873 },
-  'Indore': { lat: 22.7196, lng: 75.8577 },
-  'Nagpur': { lat: 21.1458, lng: 79.0882 },
-  'Bhopal': { lat: 23.2599, lng: 77.4126 },
-  'Visakhapatnam': { lat: 17.6868, lng: 83.2185 },
-};
+import { resolveLocationCoordinates } from '../utils/geo';
 
 export function Register() {
   const [form, setForm] = useState({
@@ -42,8 +27,8 @@ export function Register() {
     setFieldErrors({});
     setLoading(true);
     try {
-      const city = form.city.trim();
-      const coords = CITY_COORDS[city] || { lat: 20.59, lng: 78.96 };
+      const locationInput = `${form.city}, ${form.state}`.trim();
+      const resolved = resolveLocationCoordinates(locationInput);
       const companyType = form.role === 'SELLER' ? 'EMITTER' : 'OFFTAKER';
       await registerUser({
         fullName: form.fullName,
@@ -54,9 +39,9 @@ export function Register() {
           name: form.companyName,
           companyType,
           registrationNumber: form.registrationNumber || `CB-${Date.now().toString(36).toUpperCase()}`,
-          latitude: coords.lat,
-          longitude: coords.lng,
-          address: `${form.city}, ${form.state}`.trim() || 'India',
+          latitude: resolved.latitude,
+          longitude: resolved.longitude,
+          address: `${resolved.city}, ${resolved.state}`.trim() || form.city || 'Ahmedabad, Gujarat',
         },
       });
       await login(form.email, form.password);

@@ -1,0 +1,718 @@
+/* CarbonBridge Buyer Active Transaction Map Styling */
+
+.cb-active-map-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.cb-map-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cb-map-header-row h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cb-map-header-sub {
+  margin: 4px 0 0 0;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.cb-map-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.cb-stat-pill.highlight {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+/* Empty State Card */
+.cb-empty-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.cb-empty-icon-wrap {
+  width: 72px;
+  height: 72px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  margin-bottom: 20px;
+}
+
+.cb-empty-title {
+  margin: 0 0 8px 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.cb-empty-desc {
+  max-width: 500px;
+  margin: 0 0 24px 0;
+  font-size: 0.9375rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.cb-btn-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f5132;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.18s ease;
+  box-shadow: 0 2px 8px rgba(15, 81, 50, 0.25);
+}
+
+.cb-btn-cta:hover {
+  background: #198754;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 81, 50, 0.35);
+}
+
+/* Main Map Card */
+.cb-map-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.cb-map-container {
+  height: 520px;
+  width: 100%;
+  z-index: 1;
+}
+
+/* Map Legend */
+.cb-map-legend {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+}
+
+.cb-legend-title {
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  font-size: 0.6875rem;
+}
+
+.cb-legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cb-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.cb-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cb-legend-dot.seller {
+  background: #0f5132;
+  border: 1px solid #ffffff;
+  box-shadow: 0 0 4px rgba(15, 81, 50, 0.5);
+}
+
+.cb-legend-dot.buyer {
+  background: #1e40af;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.cb-legend-line {
+  width: 16px;
+  height: 3px;
+  background: #10b981;
+  border-radius: 2px;
+}
+
+/* Custom Marker Pins */
+.cb-buyer-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  background: #1e3a8a;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 3px 12px rgba(30, 58, 138, 0.45);
+  cursor: pointer;
+}
+
+.cb-pin-badge {
+  line-height: 1;
+}
+
+.cb-pin-pulse {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid #3b82f6;
+  opacity: 0.7;
+  animation: cbPulse 2s infinite ease-out;
+}
+
+@keyframes cbPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.cb-seller-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #0f5132;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 3px 10px rgba(15, 81, 50, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.cb-seller-pin:hover {
+  transform: scale(1.15);
+}
+
+/* Custom Popup */
+.cb-popup {
+  font-family: inherit;
+  padding: 4px 2px;
+  min-width: 220px;
+  max-width: 300px;
+}
+
+.cb-popup-header {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.cb-popup-header.buyer .cb-popup-tag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.cb-popup-header.seller .cb-popup-tag {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.cb-popup-header.route .cb-popup-tag {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.cb-popup-tag {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.cb-popup-header h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.cb-popup-address {
+  margin: 0 0 8px 0;
+  font-size: 0.6875rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.cb-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.cb-popup-grid .label {
+  color: #64748b;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.cb-popup-stats {
+  font-size: 0.75rem;
+  color: #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cb-route-quality {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.cb-route-quality.verified {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.cb-route-quality.fallback {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+/* Status Badges */
+.cb-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cb-status-badge.allocated {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.cb-status-badge.dispatch_pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.cb-status-badge.in_transit {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.cb-status-badge.delivered {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+/* Transaction Summary Section */
+.cb-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cb-summary-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.cb-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.cb-summary-header h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cb-summary-meta {
+  font-size: 0.8125rem;
+  color: #065f46;
+  font-weight: 600;
+  background: #ecfdf5;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+}
+
+.cb-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.cb-route-item-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.cb-route-item-card:hover {
+  background: #ffffff;
+  border-color: #10b981;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+  transform: translateY(-2px);
+}
+
+.cb-route-item-card.active {
+  background: #ffffff;
+  border-color: #0f5132;
+  box-shadow: 0 0 0 2px rgba(15, 81, 50, 0.2);
+}
+
+.cb-route-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cb-seller-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-seller-badge-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0f5132;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.cb-seller-name {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #1e293b;
+  margin: 0;
+}
+
+.cb-seller-addr {
+  font-size: 0.6875rem;
+  color: #64748b;
+  margin: 2px 0 0 0;
+}
+
+.cb-route-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+  font-size: 0.75rem;
+}
+
+.cb-metric-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.cb-metric-label {
+  font-size: 0.625rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.cb-metric-val {
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 1px;
+}
+
+.cb-route-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.cb-route-link-cta {
+  background: transparent;
+  border: none;
+  color: #0f5132;
+  font-weight: 600;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cb-route-link-cta:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Overrides */
+@media (max-width: 768px) {
+  .cb-map-container {
+    height: 380px;
+  }
+  .cb-routes-grid {
+    grid-template-columns: 1fr;
+  }
+  .cb-map-legend {
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    max-width: none;
+  }
+  .cb-legend-items {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+/* Truck Pin on Active Map */
+.cb-truck-pin {
+  width: 32px;
+  height: 32px;
+  background: #ffffff;
+  border: 2px solid #059669;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
+  position: relative;
+  cursor: pointer;
+}
+
+.cb-truck-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.cb-truck-pulse {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  animation: cb-truck-glow 2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes cb-truck-glow {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+/* Progress bar inside card */
+.cb-route-progress-wrap {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-route-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.cb-route-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.cb-route-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 9999px;
+  transition: width 0.5s ease;
+}
+
+.cb-route-progress-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.6875rem;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cb-gps-disclaimer-pill {
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cb-disclaimer-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-top: 10px;
+}
+

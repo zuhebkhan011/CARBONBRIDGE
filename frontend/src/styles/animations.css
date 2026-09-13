@@ -120,6 +120,8 @@
 /* ── Page Transitions ───────────────────────────────────────── */
 .page-enter {
   animation: pageEnter 0.3s var(--ease-out-expo) forwards;
+  width: 100%;
+  min-width: 0;
 }
 
 @keyframes pageEnter {

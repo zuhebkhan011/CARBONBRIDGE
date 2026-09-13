@@ -10,6 +10,7 @@ export function CarbonBridgeAssistant() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,6 +22,9 @@ export function CarbonBridgeAssistant() {
   const [isNewUser, setIsNewUser] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const chatBodyRef = useRef(null);
+  const panelRef = useRef(null);
+  const prevMessageCountRef = useRef(0);
   const recognitionRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -86,12 +90,33 @@ export function CarbonBridgeAssistant() {
       });
   }, [user, userRole, dismissalKey]);
 
-  // Scroll to bottom of chat
+  // Handle controlled scrolling without clipping onboarding header
   useEffect(() => {
-    if (isOpen && !isMinimized) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!isOpen || isMinimized) return;
+
+    // Guard against panel container itself having scrollTop
+    if (panelRef.current) {
+      panelRef.current.scrollTop = 0;
     }
-  }, [messages, isOpen, isMinimized]);
+
+    if (!chatBodyRef.current) return;
+
+    // When opened with onboarding active, keep scrollTop = 0 so the entire onboarding card is visible
+    if (showOnboarding && messages.length <= 1) {
+      chatBodyRef.current.scrollTop = 0;
+      prevMessageCountRef.current = messages.length;
+      return;
+    }
+
+    // Scroll chat body only when new messages are appended
+    if (messages.length > prevMessageCountRef.current) {
+      chatBodyRef.current.scrollTo({
+        top: chatBodyRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages, isOpen, isMinimized, showOnboarding]);
 
   // Initialize Speech Recognition if supported
   useEffect(() => {
@@ -284,9 +309,13 @@ export function CarbonBridgeAssistant() {
 
       {/* Floating Assistant Panel */}
       {isOpen && (
-        <div className={`cb-assistant-panel ${isMinimized ? 'minimized' : ''}`}>
+        <div ref={panelRef} className={`cb-assistant-panel ${isMinimized ? 'minimized' : ''} ${isMaximized ? 'maximized' : ''}`}>
           {/* Header */}
-          <div className="cb-assistant-header">
+          <div
+            className="cb-assistant-header"
+            onClick={isMinimized ? () => setIsMinimized(false) : undefined}
+            style={isMinimized ? { cursor: 'pointer' } : undefined}
+          >
             <div className="cb-header-left">
               <div className="cb-header-avatar">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -305,7 +334,10 @@ export function CarbonBridgeAssistant() {
             <div className="cb-header-actions">
               <button
                 className="cb-btn-icon"
-                onClick={handleResetConversation}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResetConversation();
+                }}
                 title="Reset conversation"
                 aria-label="Reset conversation"
               >
@@ -317,22 +349,50 @@ export function CarbonBridgeAssistant() {
                 </svg>
               </button>
               <button
-                className="cb-btn-icon"
-                onClick={() => setIsMinimized(!isMinimized)}
-                title={isMinimized ? 'Expand' : 'Minimize'}
-                aria-label={isMinimized ? 'Expand' : 'Minimize'}
+                className="cb-btn-icon cb-btn-minimize"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMinimized(!isMinimized);
+                }}
+                title={isMinimized ? 'Restore assistant' : 'Minimize assistant'}
+                aria-label="Minimize assistant"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
               </button>
               <button
-                className="cb-btn-icon"
-                onClick={() => setIsOpen(false)}
-                title="Close"
-                aria-label="Close"
+                className="cb-btn-icon cb-btn-maximize"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isMinimized) setIsMinimized(false);
+                  setIsMaximized(!isMaximized);
+                }}
+                title={isMaximized ? 'Restore assistant' : 'Maximize assistant'}
+                aria-label="Maximize assistant"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {isMaximized ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 14h6v6m10-10h-6V4m0 6 7-7M3 21l7-7" />
+                  </svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  </svg>
+                )}
+              </button>
+              <button
+                className="cb-btn-icon cb-btn-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  setIsMinimized(false);
+                  setIsMaximized(false);
+                }}
+                title="Close assistant"
+                aria-label="Close assistant"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -342,8 +402,10 @@ export function CarbonBridgeAssistant() {
 
           {!isMinimized && (
             <>
-              {/* Onboarding Banner Card */}
-              {showOnboarding && onboardingCard && (
+              {/* Scrollable Assistant Body */}
+              <div className="cb-assistant-body" ref={chatBodyRef}>
+                {/* Onboarding Banner Card */}
+                {showOnboarding && onboardingCard && (
                 <div className="cb-onboarding-banner">
                   <div className="cb-onboarding-header">
                     <div>
@@ -495,9 +557,10 @@ export function CarbonBridgeAssistant() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+            </div>
 
-              {/* Notice / Mic State Banner */}
-              {micNotice && (
+            {/* Notice / Mic State Banner */}
+            {micNotice && (
                 <div className="cb-notice-banner">
                   <span>{micNotice}</span>
                   <button onClick={() => setMicNotice('')}>&times;</button>

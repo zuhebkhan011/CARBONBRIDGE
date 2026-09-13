@@ -131,6 +131,14 @@ describe('Smart Transportation Cost Optimizer — Integration Suite', () => {
 
     // Baseline savings
     expect(data.baselineComparison.isGenuinelyCalculated).toBe(true);
+
+    // Road network geometry verification
+    expect(data.recommendedRoute).toHaveProperty('isRoadRoute');
+    expect(data.recommendedRoute.isRoadRoute).toBe(true);
+    expect(data.recommendedRoute.routeType).toBe('ROAD_NETWORK');
+    expect(data.recommendedRoute.routingProvider).toBe('OSRM');
+    expect(Array.isArray(data.recommendedRoute.geometry)).toBe(true);
+    expect(data.recommendedRoute.geometry.length).toBeGreaterThan(100);
   });
 
   // 3. Multi-trip partitioning when demand exceeds vehicle capacity

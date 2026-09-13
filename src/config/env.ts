@@ -28,6 +28,7 @@ const envSchema = z.object({
   ML_SERVICE_URL: z.string().default('http://localhost:8000'),
   GEMINI_API_KEY: z.string().optional().default(''),
   GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
+  OSRM_ROUTER_URL: z.string().default('https://router.project-osrm.org'),
 });
 
 const parsed = envSchema.safeParse(process.env);

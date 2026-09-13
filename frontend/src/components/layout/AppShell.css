@@ -22,6 +22,7 @@
   padding-top: calc(var(--topbar-height) + var(--space-8));
   max-width: 1440px;
   width: 100%;
+  min-width: 0;
 }
 
 .sidebar-overlay {

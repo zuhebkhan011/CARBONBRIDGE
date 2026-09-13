@@ -3,41 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { requirementsApi } from '../../api/requirements';
 import { aiApi } from '../../api/ai';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
+import { getCityCoords } from '../../utils/geo';
 import './PostRequirement.css';
-
-const CITY_COORDS = {
-  'Ahmedabad': { lat: 23.0225, lng: 72.5714 },
-  'Rajkot': { lat: 22.3039, lng: 70.8022 },
-  'Surat': { lat: 21.1702, lng: 72.8311 },
-  'Vadodara': { lat: 22.3072, lng: 73.1812 },
-  'Mumbai': { lat: 19.0760, lng: 72.8777 },
-  'Pune': { lat: 18.5204, lng: 73.8567 },
-  'Delhi': { lat: 28.6139, lng: 77.2090 },
-  'Jaipur': { lat: 26.9124, lng: 75.7873 },
-  'Chennai': { lat: 13.0827, lng: 80.2707 },
-  'Bengaluru': { lat: 12.9716, lng: 77.5946 },
-  'Bangalore': { lat: 12.9716, lng: 77.5946 },
-  'Hyderabad': { lat: 17.3850, lng: 78.4867 },
-  'Kolkata': { lat: 22.5726, lng: 88.3639 },
-  'Indore': { lat: 22.7196, lng: 75.8577 },
-  'Nagpur': { lat: 21.1458, lng: 79.0882 },
-  'Bhopal': { lat: 23.2599, lng: 77.4126 },
-  'Visakhapatnam': { lat: 17.6868, lng: 83.2185 },
-  'Dahej': { lat: 21.7051, lng: 72.5841 },
-  'Hazira': { lat: 21.1167, lng: 72.6500 },
-  'Ankleshwar': { lat: 21.6264, lng: 73.0033 },
-  'Jamnagar': { lat: 22.4707, lng: 70.0577 },
-  'Gandhinagar': { lat: 23.2156, lng: 72.6369 },
-};
-
-const getCityCoords = (cityName) => {
-  if (!cityName) return { lat: 20.5937, lng: 78.9629 };
-  const trimmed = cityName.trim();
-  const direct = CITY_COORDS[trimmed];
-  if (direct) return direct;
-  const match = Object.keys(CITY_COORDS).find(k => k.toLowerCase() === trimmed.toLowerCase());
-  return match ? CITY_COORDS[match] : { lat: 20.5937, lng: 78.9629 };
-};
 
 const getTodayDateString = () => {
   const d = new Date();

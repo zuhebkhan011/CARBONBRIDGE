@@ -1,145 +1,8 @@
-export interface GeoCoordinate {
-  latitude: number;
-  longitude: number;
-}
-
-const EARTH_RADIUS_KM = 6371;
-
-const toRadians = (degrees: number): number => {
-  return (degrees * Math.PI) / 180;
-};
-
 /**
- * Computes great-circle distance between two points using the Haversine formula
+ * Authoritative Indian Industrial Cities & Hubs Registry
+ * Single Source of Truth for CarbonBridge Geographical Resolution
  */
-export const calculateDistanceKm = (coord1: GeoCoordinate, coord2: GeoCoordinate): number => {
-  const dLat = toRadians(coord2.latitude - coord1.latitude);
-  const dLon = toRadians(coord2.longitude - coord1.longitude);
-
-  const lat1 = toRadians(coord1.latitude);
-  const lat2 = toRadians(coord2.latitude);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = EARTH_RADIUS_KM * c;
-
-  return Math.round(distance * 100) / 100; // Round to 2 decimal places
-};
-
-/**
- * Computes independent round-trip distances from an origin to multiple destinations:
- * D_separate = sum(2 * distance(Origin, Dest_i))
- */
-export const calculateIndependentRoundTripKm = (
-  origin: GeoCoordinate,
-  destinations: GeoCoordinate[]
-): number => {
-  let totalKm = 0;
-  for (const dest of destinations) {
-    totalKm += 2 * calculateDistanceKm(origin, dest);
-  }
-  return Math.round(totalKm * 100) / 100;
-};
-
-/**
- * Computes consolidated multi-drop circuit distance:
- * Origin -> Dest_1 -> Dest_2 -> ... -> Dest_n -> Origin
- * Simple nearest-neighbor heuristic for ordering multi-drop sequence.
- */
-export const calculateConsolidatedRouteKm = (
-  origin: GeoCoordinate,
-  destinations: GeoCoordinate[]
-): { totalDistanceKm: number; orderedPath: GeoCoordinate[] } => {
-  if (destinations.length === 0) {
-    return { totalDistanceKm: 0, orderedPath: [origin] };
-  }
-
-  const unvisited = [...destinations];
-  let current = origin;
-  const orderedPath: GeoCoordinate[] = [origin];
-  let totalDistance = 0;
-
-  while (unvisited.length > 0) {
-    let nearestIdx = 0;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < unvisited.length; i++) {
-      const dist = calculateDistanceKm(current, unvisited[i]);
-      if (dist < minDistance) {
-        minDistance = dist;
-        nearestIdx = i;
-      }
-    }
-
-    totalDistance += minDistance;
-    current = unvisited[nearestIdx];
-    orderedPath.push(current);
-    unvisited.splice(nearestIdx, 1);
-  }
-
-  // Return to origin
-  const returnDist = calculateDistanceKm(current, origin);
-  totalDistance += returnDist;
-  orderedPath.push(origin);
-
-  return {
-    totalDistanceKm: Math.round(totalDistance * 100) / 100,
-    orderedPath,
-  };
-};
-
-/**
- * Dynamically computes mileage savings:
- * Savings = (D_separate - D_consolidated) / D_separate * 100
- * No hard-coding!
- */
-export const computeRouteSavings = (
-  origin: GeoCoordinate,
-  destinations: GeoCoordinate[]
-): {
-  independentDistanceKm: number;
-  consolidatedDistanceKm: number;
-  distanceSavedKm: number;
-  savingsPercentage: number;
-  orderedPath: GeoCoordinate[];
-} => {
-  const independentDistanceKm = calculateIndependentRoundTripKm(origin, destinations);
-  const { totalDistanceKm: consolidatedDistanceKm, orderedPath } = calculateConsolidatedRouteKm(
-    origin,
-    destinations
-  );
-
-  const distanceSavedKm = Math.max(
-    0,
-    Math.round((independentDistanceKm - consolidatedDistanceKm) * 100) / 100
-  );
-
-  const savingsPercentage =
-    independentDistanceKm > 0
-      ? Math.round((distanceSavedKm / independentDistanceKm) * 10000) / 100
-      : 0;
-
-  return {
-    independentDistanceKm,
-    consolidatedDistanceKm,
-    distanceSavedKm,
-    savingsPercentage,
-    orderedPath,
-  };
-};
-
-export interface AuthoritativeCity {
-  city: string;
-  state: string;
-  latitude: number;
-  longitude: number;
-  aliases: string[];
-}
-
-export const AUTHORITATIVE_CITIES: AuthoritativeCity[] = [
+export const AUTHORITATIVE_CITIES = [
   { city: 'Ahmedabad', state: 'Gujarat', latitude: 23.0225, longitude: 72.5714, aliases: ['ahmedabad', 'ahmedaba', 'ahmdabad', 'amdavad'] },
   { city: 'Rajkot', state: 'Gujarat', latitude: 22.3039, longitude: 70.8022, aliases: ['rajkot', 'rajcot'] },
   { city: 'Surat', state: 'Gujarat', latitude: 21.1702, longitude: 72.8311, aliases: ['surat'] },
@@ -164,30 +27,26 @@ export const AUTHORITATIVE_CITIES: AuthoritativeCity[] = [
   { city: 'Visakhapatnam', state: 'Andhra Pradesh', latitude: 17.6868, longitude: 83.2185, aliases: ['visakhapatnam', 'vizag'] },
 ];
 
-export interface ResolvedLocation {
-  city: string;
-  state: string;
-  latitude: number;
-  longitude: number;
-  isAuthoritative: boolean;
-  normalizedAddress: string;
+/**
+ * Checks if coordinates are the generic central India centroid fallback (~20.59, 78.96)
+ */
+export function isBogusCentroidCoordinate(lat, lng) {
+  if (lat == null || lng == null) return false;
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  return Math.abs(numLat - 20.59) < 0.1 && Math.abs(numLng - 78.96) < 0.1;
 }
 
-export function isBogusCentroidCoordinate(lat: number, lng: number): boolean {
-  return Math.abs(lat - 20.59) < 0.1 && Math.abs(lng - 78.96) < 0.1;
-}
-
-export function resolveLocationCoordinates(
-  addressOrCity?: string | null,
-  existingLat?: number | null,
-  existingLng?: number | null
-): ResolvedLocation {
+/**
+ * Resolves location coordinates with normalization, alias matching, and bogus coordinate detection.
+ */
+export function resolveLocationCoordinates(addressOrCity, existingLat, existingLng) {
   const text = (addressOrCity || '').trim();
   const lower = text.toLowerCase();
 
-  let matchedCity: AuthoritativeCity | undefined;
+  let matchedCity = undefined;
   for (const c of AUTHORITATIVE_CITIES) {
-    if (c.city.toLowerCase() === lower || c.aliases.some(a => a.toLowerCase() === lower)) {
+    if (c.city.toLowerCase() === lower || c.aliases.some((a) => a.toLowerCase() === lower)) {
       matchedCity = c;
       break;
     }
@@ -195,15 +54,19 @@ export function resolveLocationCoordinates(
 
   if (!matchedCity && text) {
     for (const c of AUTHORITATIVE_CITIES) {
-      if (c.aliases.some(a => lower.includes(a.toLowerCase())) || lower.includes(c.city.toLowerCase())) {
+      if (c.aliases.some((a) => lower.includes(a.toLowerCase())) || lower.includes(c.city.toLowerCase())) {
         matchedCity = c;
         break;
       }
     }
   }
 
-  const hasExisting = existingLat != null && existingLng != null && !isNaN(existingLat) && !isNaN(existingLng);
-  const isBogus = hasExisting && isBogusCentroidCoordinate(existingLat!, existingLng!);
+  const hasExisting =
+    existingLat != null &&
+    existingLng != null &&
+    !isNaN(Number(existingLat)) &&
+    !isNaN(Number(existingLng));
+  const isBogus = hasExisting && isBogusCentroidCoordinate(Number(existingLat), Number(existingLng));
 
   if (matchedCity) {
     if (!hasExisting || isBogus) {
@@ -217,27 +80,11 @@ export function resolveLocationCoordinates(
       };
     }
 
-    const distFromCity = calculateDistanceKm(
-      { latitude: existingLat!, longitude: existingLng! },
-      { latitude: matchedCity.latitude, longitude: matchedCity.longitude }
-    );
-
-    if (distFromCity <= 80) {
-      return {
-        city: matchedCity.city,
-        state: matchedCity.state,
-        latitude: existingLat!,
-        longitude: existingLng!,
-        isAuthoritative: true,
-        normalizedAddress: text,
-      };
-    }
-
     return {
       city: matchedCity.city,
       state: matchedCity.state,
-      latitude: matchedCity.latitude,
-      longitude: matchedCity.longitude,
+      latitude: Number(existingLat),
+      longitude: Number(existingLng),
       isAuthoritative: true,
       normalizedAddress: text,
     };
@@ -247,14 +94,14 @@ export function resolveLocationCoordinates(
     return {
       city: text.split(',')[0]?.trim() || 'Custom Facility',
       state: text.split(',')[1]?.trim() || '',
-      latitude: existingLat!,
-      longitude: existingLng!,
+      latitude: Number(existingLat),
+      longitude: Number(existingLng),
       isAuthoritative: false,
       normalizedAddress: text,
     };
   }
 
-  const defaultCity = AUTHORITATIVE_CITIES[0]; // Ahmedabad
+  const defaultCity = AUTHORITATIVE_CITIES[0]; // Ahmedabad default hub
   return {
     city: defaultCity.city,
     state: defaultCity.state,
@@ -265,12 +112,35 @@ export function resolveLocationCoordinates(
   };
 }
 
-export interface GeometryPositionResult {
-  position: [number, number];
-  travelledGeometry: [number, number][];
-  remainingGeometry: [number, number][];
-  totalGeometryDistanceKm: number;
-  coveredDistanceKm: number;
+/**
+ * Convenience helper returning { lat, lng } for form inputs
+ */
+export function getCityCoords(cityName) {
+  const resolved = resolveLocationCoordinates(cityName);
+  return { lat: resolved.latitude, lng: resolved.longitude };
+}
+
+const EARTH_RADIUS_KM = 6371;
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+export function calculateDistanceKm(coord1, coord2) {
+  const lat1 = Number(coord1.latitude ?? coord1.lat ?? coord1[0]);
+  const lon1 = Number(coord1.longitude ?? coord1.lng ?? coord1[1]);
+  const lat2 = Number(coord2.latitude ?? coord2.lat ?? coord2[0]);
+  const lon2 = Number(coord2.longitude ?? coord2.lng ?? coord2[1]);
+
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2));
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(EARTH_RADIUS_KM * c * 100) / 100;
 }
 
 /**
@@ -278,10 +148,7 @@ export interface GeometryPositionResult {
  * Traverses cumulative segment distances using the Haversine formula and interpolates
  * along the active road polyline segment — NEVER in a straight line.
  */
-export function calculatePositionAlongGeometry(
-  geometry: [number, number][],
-  ratio: number
-): GeometryPositionResult | null {
+export function calculatePositionAlongGeometry(geometry, ratio) {
   if (!Array.isArray(geometry) || geometry.length === 0) {
     return null;
   }
@@ -298,7 +165,7 @@ export function calculatePositionAlongGeometry(
     };
   }
 
-  const segmentDistances: number[] = [];
+  const segmentDistances = [];
   let totalDistance = 0;
 
   for (let i = 0; i < geometry.length - 1; i++) {
@@ -338,15 +205,15 @@ export function calculatePositionAlongGeometry(
 
       const interpLat = p1[0] + clampedFraction * (p2[0] - p1[0]);
       const interpLng = p1[1] + clampedFraction * (p2[1] - p1[1]);
-      const interpPos: [number, number] = [
+      const interpPos = [
         Math.round(interpLat * 1e6) / 1e6,
         Math.round(interpLng * 1e6) / 1e6,
       ];
 
-      const travelledGeometry: [number, number][] = geometry.slice(0, i + 1);
+      const travelledGeometry = geometry.slice(0, i + 1);
       travelledGeometry.push(interpPos);
 
-      const remainingGeometry: [number, number][] = [interpPos];
+      const remainingGeometry = [interpPos];
       for (let j = i + 1; j < geometry.length; j++) {
         remainingGeometry.push(geometry[j]);
       }
@@ -372,31 +239,6 @@ export function calculatePositionAlongGeometry(
   };
 }
 
-export interface EstimatedProgressParams {
-  dispatchedAt?: Date | string | null;
-  durationHours?: number | null;
-  distanceKm?: number | null;
-  geometry?: [number, number][];
-  currentTime?: Date | string;
-}
-
-export interface EstimatedProgressResult {
-  isCalculable: boolean;
-  progressPercentage: number | null;
-  elapsedRatio: number | null;
-  elapsedHours: number | null;
-  durationRemainingHours: number | null;
-  distanceCoveredKm: number | null;
-  distanceRemainingKm: number | null;
-  etaText: string;
-  progressText: string;
-  position: [number, number] | null;
-  travelledGeometry: [number, number][];
-  remainingGeometry: [number, number][];
-  statusLabel: string;
-  gpsDisclaimer: string;
-}
-
 export const GPS_UNAVAILABLE_DISCLAIMER =
   'GPS tracking unavailable — position estimated from shipment progress';
 
@@ -408,12 +250,14 @@ export const GPS_UNAVAILABLE_DISCLAIMER =
  * - If timestamps or duration are missing/invalid, reports "ETA unavailable" & "Estimated progress unavailable".
  * - Position is derived along road route geometry, never straight line.
  */
-export function calculateEstimatedProgress(
-  params: EstimatedProgressParams
-): EstimatedProgressResult {
-  const { dispatchedAt, durationHours, distanceKm, geometry, currentTime } = params;
-
-  const defaultResult: EstimatedProgressResult = {
+export function calculateEstimatedProgress({
+  dispatchedAt,
+  durationHours,
+  distanceKm,
+  geometry,
+  currentTime,
+}) {
+  const defaultResult = {
     isCalculable: false,
     progressPercentage: null,
     elapsedRatio: null,
@@ -430,7 +274,7 @@ export function calculateEstimatedProgress(
     gpsDisclaimer: GPS_UNAVAILABLE_DISCLAIMER,
   };
 
-  if (!dispatchedAt || durationHours == null || isNaN(durationHours) || durationHours <= 0) {
+  if (!dispatchedAt || durationHours == null || isNaN(durationHours) || Number(durationHours) <= 0) {
     return defaultResult;
   }
 
@@ -439,15 +283,16 @@ export function calculateEstimatedProgress(
     return defaultResult;
   }
 
+  const durHours = Number(durationHours);
   const now = currentTime ? new Date(currentTime).getTime() : Date.now();
   const elapsedMs = Math.max(0, now - dispatchTime);
   const elapsedHours = elapsedMs / (1000 * 60 * 60);
 
-  const rawRatio = elapsedHours / durationHours;
+  const rawRatio = elapsedHours / durHours;
   const elapsedRatio = Math.max(0, Math.min(1, rawRatio));
   const progressPercentage = Math.round(elapsedRatio * 100);
 
-  const durationRemainingHours = Math.max(0, durationHours - elapsedHours);
+  const durationRemainingHours = Math.max(0, durHours - elapsedHours);
 
   let etaText = 'ETA unavailable';
   if (durationRemainingHours >= 1) {
@@ -460,11 +305,12 @@ export function calculateEstimatedProgress(
     etaText = 'Arriving shortly';
   }
 
-  let position: [number, number] | null = null;
-  let travelledGeometry: [number, number][] = [];
-  let remainingGeometry: [number, number][] = Array.isArray(geometry) ? [...geometry] : [];
-  let distanceCoveredKm: number | null = null;
-  let distanceRemainingKm: number | null = null;
+  let position = null;
+  let travelledGeometry = [];
+  let remainingGeometry = Array.isArray(geometry) ? [...geometry] : [];
+  let distanceCoveredKm = null;
+  let distanceRemainingKm = null;
+  const distKm = distanceKm != null ? Number(distanceKm) : null;
 
   if (Array.isArray(geometry) && geometry.length > 0) {
     const geomResult = calculatePositionAlongGeometry(geometry, elapsedRatio);
@@ -473,9 +319,9 @@ export function calculateEstimatedProgress(
       travelledGeometry = geomResult.travelledGeometry;
       remainingGeometry = geomResult.remainingGeometry;
 
-      if (distanceKm != null && distanceKm > 0) {
-        distanceCoveredKm = Math.round(elapsedRatio * distanceKm * 10) / 10;
-        distanceRemainingKm = Math.max(0, Math.round((distanceKm - distanceCoveredKm) * 10) / 10);
+      if (distKm != null && distKm > 0) {
+        distanceCoveredKm = Math.round(elapsedRatio * distKm * 10) / 10;
+        distanceRemainingKm = Math.max(0, Math.round((distKm - distanceCoveredKm) * 10) / 10);
       } else {
         distanceCoveredKm = geomResult.coveredDistanceKm;
         distanceRemainingKm = Math.max(
@@ -484,9 +330,9 @@ export function calculateEstimatedProgress(
         );
       }
     }
-  } else if (distanceKm != null && distanceKm > 0) {
-    distanceCoveredKm = Math.round(elapsedRatio * distanceKm * 10) / 10;
-    distanceRemainingKm = Math.max(0, Math.round((distanceKm - distanceCoveredKm) * 10) / 10);
+  } else if (distKm != null && distKm > 0) {
+    distanceCoveredKm = Math.round(elapsedRatio * distKm * 10) / 10;
+    distanceRemainingKm = Math.max(0, Math.round((distKm - distanceCoveredKm) * 10) / 10);
   }
 
   return {
@@ -506,5 +352,4 @@ export function calculateEstimatedProgress(
     gpsDisclaimer: GPS_UNAVAILABLE_DISCLAIMER,
   };
 }
-
 

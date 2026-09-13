@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CostService } from '../../src/modules/logistics/cost.service.js';
 import { RouteService } from '../../src/modules/logistics/route.service.js';
 import { OptimizerService } from '../../src/modules/logistics/optimizer.service.js';
-import { DeliveryStop, GeoCoordinate, VehicleConfig } from '../../src/modules/logistics/types.js';
+import { DeliveryStop, VehicleConfig } from '../../src/modules/logistics/types.js';
 
 describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
   const sellerPlant = {
@@ -44,6 +44,16 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
     requiredDeliveryDate: new Date(Date.now() + 96 * 3600 * 1000), // 96h from now
     co2PricePerTon: 2500,
   };
+
+  beforeEach(() => {
+    RouteService.clearCache();
+    RouteService.setMockRoutingHandler(null);
+  });
+
+  afterEach(() => {
+    RouteService.clearCache();
+    RouteService.setMockRoutingHandler(null);
+  });
 
   // 1-5: Basic single buyer & cost metrics
   describe('1. Basic Distance, Cost, Unit Economics & Landed Cost', () => {
@@ -113,8 +123,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       expect(landed.landedCostPerTonne).toBe(2520); // 2400 + 120/T
     });
 
-    it('4. Optimizes single buyer route with circuit back to origin plant', () => {
-      const result = OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
+    it('4. Optimizes single buyer route with circuit back to origin plant', async () => {
+      const result = await OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
 
       expect(result.recommendedRoute).toBeDefined();
       expect(result.recommendedRoute.trips.length).toBe(1);
@@ -122,14 +132,16 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       expect(result.recommendedRoute.routeId).toBeDefined();
       expect(result.totalDeliveredQuantityTonnes).toBe(100);
       expect(result.recommendedRoute.costBreakdown.totalEstimatedCost).toBeGreaterThan(0);
+      expect(result.recommendedRoute.isRoadRoute).toBe(true);
+      expect(result.recommendedRoute.geometry.length).toBeGreaterThan(1);
     });
   });
 
   // 6-9: Multi-Buyer Delivery Optimization
   describe('2. Multi-Buyer Sequence Optimization & Alternative Comparison', () => {
-    it('5. Evaluates multi-buyer delivery sequences and recommends lowest-cost route', () => {
+    it('5. Evaluates multi-buyer delivery sequences and recommends lowest-cost route', async () => {
       // 3 buyers with total 350T, vehicle capacity 400T so they fit in 1 consolidated trip
-      const result = OptimizerService.optimizeRoutes(
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara, buyerRajkot, buyerSurat],
         { capacityTonnes: 400 }
@@ -152,8 +164,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       }
     });
 
-    it('6. Does not optimize only for distance: prioritizes lowest economic logistics cost', () => {
-      const result = OptimizerService.optimizeRoutes(
+    it('6. Does not optimize only for distance: prioritizes lowest economic logistics cost', async () => {
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara, buyerRajkot, buyerSurat],
         { capacityTonnes: 400 }
@@ -171,8 +183,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
 
   // 10-12: Vehicle Capacity Constraints & Multi-Trip Splitting
   describe('3. Vehicle Capacity Constraints & Multi-Trip Splitting', () => {
-    it('7. Fits within vehicle capacity (150T demand into 200T vehicle) in 1 trip', () => {
-      const result = OptimizerService.optimizeRoutes(
+    it('7. Fits within vehicle capacity (150T demand into 200T vehicle) in 1 trip', async () => {
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara], // 100T
         { capacityTonnes: 200 }
@@ -183,8 +195,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       expect(result.recommendedRoute.trips[0].allocatedTonnage).toBeLessThanOrEqual(200);
     });
 
-    it('8. Splits into multiple feasible trips when total demand (350T) exceeds vehicle capacity (200T)', () => {
-      const result = OptimizerService.optimizeRoutes(
+    it('8. Splits into multiple feasible trips when total demand (350T) exceeds vehicle capacity (200T)', async () => {
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara, buyerRajkot, buyerSurat], // 100T + 150T + 100T = 350T
         { capacityTonnes: 200 }
@@ -225,8 +237,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
 
   // 13-15: Delivery Time Windows & Deadlines
   describe('4. Delivery Time Windows & Deadlines', () => {
-    it('10. Satisfies delivery deadlines when schedule is feasible', () => {
-      const result = OptimizerService.optimizeRoutes(
+    it('10. Satisfies delivery deadlines when schedule is feasible', async () => {
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara, buyerSurat],
         { capacityTonnes: 300 }
@@ -235,14 +247,14 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       expect(result.recommendedRoute.constraintsSatisfied.deadlinesSatisfied).toBe(true);
     });
 
-    it('11. Flags deadline warning if required delivery date is in the past or unachievable', () => {
+    it('11. Flags deadline warning if required delivery date is in the past or unachievable', async () => {
       const expiredStop: DeliveryStop = {
         ...buyerVadodara,
         id: 'stop-expired',
         requiredDeliveryDate: new Date(Date.now() - 3600 * 1000), // 1h in the past
       };
 
-      const result = OptimizerService.optimizeRoutes(sellerPlant, [expiredStop]);
+      const result = await OptimizerService.optimizeRoutes(sellerPlant, [expiredStop]);
       expect(result.recommendedRoute.constraintsSatisfied.deadlinesSatisfied).toBe(false);
       expect(result.recommendedRoute.cons.some((c) => c.includes('deadline'))).toBe(true);
     });
@@ -250,8 +262,8 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
 
   // 16-24: Baseline vs Optimized Savings & No Fake Data
   describe('5. Baseline vs Optimized Savings & Honest Metrics', () => {
-    it('12. Genuinely calculates baseline vs consolidated savings without hardcoding', () => {
-      const result = OptimizerService.optimizeRoutes(
+    it('12. Genuinely calculates baseline vs consolidated savings without hardcoding', async () => {
+      const result = await OptimizerService.optimizeRoutes(
         sellerPlant,
         [buyerVadodara, buyerSurat],
         { capacityTonnes: 300 }
@@ -268,19 +280,195 @@ describe('Smart Transportation Cost Optimizer — Unit Test Suite', () => {
       expect(comparison.savingsAmount).toBe(expectedDiff);
     });
 
-    it('13. Never invents fake live traffic data: explicitly discloses unavailabilty', () => {
-      const result = OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
+    it('13. Never invents fake live traffic data: explicitly discloses unavailabilty', async () => {
+      const result = await OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
       expect(result.trafficDisclosure).toContain('Traffic data unavailable');
       expect(result.trafficDisclosure).toContain('estimate based on normal travel conditions');
       expect(result.recommendedRoute.trafficStatus).not.toBe('Low Traffic');
       expect(result.recommendedRoute.trafficStatus).not.toBe('High Traffic');
     });
 
-    it('14. Never displays fake savings if no consolidation occurred (e.g. single stop)', () => {
-      const result = OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
+    it('14. Never displays fake savings if no consolidation occurred (e.g. single stop)', async () => {
+      const result = await OptimizerService.optimizeRoutes(sellerPlant, [buyerVadodara]);
       // For a single stop, consolidated round trip is identical to independent round trip
       expect(result.baselineComparison.savingsPercentage).toBe(0);
       expect(result.baselineComparison.savingsAmount).toBe(0);
+    });
+  });
+
+  // 15-24: Real Road Network Routing & OSRM Road Geometry (10 Requirements)
+  describe('6. Real Road Network Routing, Geometry & Cost Consistency', () => {
+    it('15. Routing provider returns actual road geometry (GeoJSON LineString + high-density Leaflet coordinates)', async () => {
+      const circuit = await RouteService.getRoadRouteCircuit(
+        sellerPlant.coordinates,
+        [buyerVadodara]
+      );
+
+      expect(circuit.isRoadRoute).toBe(true);
+      expect(circuit.routeType).toBe('ROAD_NETWORK');
+      expect(circuit.routeStatus).toBe('OPTIMAL_ROAD_ROUTE');
+      expect(circuit.routingProvider).toBe('OSRM');
+
+      // GeoJSON LineString check
+      expect(circuit.geoJsonGeometry).toBeDefined();
+      expect(circuit.geoJsonGeometry.type).toBe('LineString');
+      expect(Array.isArray(circuit.geoJsonGeometry.coordinates)).toBe(true);
+      // High-density road coordinates along Ahmedabad-Vadodara Expressway / NH48
+      expect(circuit.geoJsonGeometry.coordinates.length).toBeGreaterThan(100);
+
+      // Leaflet coordinates check ([lat, lng][])
+      expect(circuit.geometry.length).toBe(circuit.geoJsonGeometry.coordinates.length);
+      const firstCoord = circuit.geometry[0];
+      expect(firstCoord[0]).toBeCloseTo(sellerPlant.coordinates.latitude, 1);
+      expect(firstCoord[1]).toBeCloseTo(sellerPlant.coordinates.longitude, 1);
+    });
+
+    it('16. Route distance and duration come directly from road route', async () => {
+      const circuit = await RouteService.getRoadRouteCircuit(
+        sellerPlant.coordinates,
+        [buyerVadodara]
+      );
+
+      // Ahmedabad to Vadodara and back via NH48 is ~200-240 km road distance
+      expect(circuit.totalDistanceKm).toBeGreaterThan(180);
+      expect(circuit.totalDistanceKm).toBeLessThan(260);
+
+      // Duration should be driving time + 1.0 hr offload handling
+      expect(circuit.totalDurationHours).toBeGreaterThan(2.5);
+      expect(circuit.totalDurationHours).toBeLessThan(6.0);
+    });
+
+    it('17. Multi-stop geometry is a continuous closed circuit connecting all waypoints', async () => {
+      const circuit = await RouteService.getRoadRouteCircuit(
+        sellerPlant.coordinates,
+        [buyerVadodara, buyerRajkot, buyerSurat]
+      );
+
+      expect(circuit.isRoadRoute).toBe(true);
+      expect(circuit.legs.length).toBe(4); // S -> Vadodara -> Rajkot -> Surat -> S
+      expect(circuit.geometry.length).toBeGreaterThan(1000); // Dense road network coordinates
+
+      // Verify each leg has its own continuous road geometry
+      for (const leg of circuit.legs) {
+        expect(leg.geometry).toBeDefined();
+        expect(leg.geometry!.length).toBeGreaterThan(50);
+        expect(leg.distanceKm).toBeGreaterThan(0);
+        expect(leg.durationHours).toBeGreaterThan(0);
+      }
+    });
+
+    it('18. Optimizer stop order is preserved in the circuit itinerary', async () => {
+      const result = await OptimizerService.optimizeRoutes(
+        sellerPlant,
+        [buyerVadodara, buyerRajkot],
+        { capacityTonnes: 300 }
+      );
+
+      const rec = result.recommendedRoute;
+      const sequence = rec.trips[0].routeSequence;
+      expect(sequence[0]).toContain('Origin:');
+      expect(sequence[sequence.length - 1]).toContain('Return:');
+      expect(sequence.length).toBe(4); // Origin, Stop 1, Stop 2, Return
+    });
+
+    it('19. Selected route geometry is returned correctly on candidate objects', async () => {
+      const result = await OptimizerService.optimizeRoutes(
+        sellerPlant,
+        [buyerVadodara, buyerSurat],
+        { capacityTonnes: 300 }
+      );
+
+      const rec = result.recommendedRoute;
+      expect(rec.geometry).toBeDefined();
+      expect(rec.geometry.length).toBeGreaterThan(100);
+      expect(rec.isRoadRoute).toBe(true);
+      expect(rec.routeType).toBe('ROAD_NETWORK');
+      expect(rec.routingProvider).toBe('OSRM');
+    });
+
+    it('20. Routing API failure is handled gracefully with explicit non-road metadata', async () => {
+      // Mock failure handler simulating offline or network error
+      RouteService.setMockRoutingHandler(async () => {
+        throw new Error('Simulated network timeout');
+      });
+
+      const result = await OptimizerService.optimizeRoutes(
+        sellerPlant,
+        [buyerVadodara],
+        { capacityTonnes: 200 }
+      );
+
+      const rec = result.recommendedRoute;
+      expect(rec.isRoadRoute).toBe(false);
+      expect(rec.routeType).toBe('STRAIGHT_LINE_APPROXIMATION');
+      expect(rec.routeStatus).toBe('ROAD_ROUTE_UNAVAILABLE');
+      expect(rec.routingProvider).toBe('FALLBACK_DIRECT');
+
+      // Even with fallback, cost breakdown and trips must exist safely
+      expect(rec.costBreakdown.totalEstimatedCost).toBeGreaterThan(0);
+      expect(rec.geometry.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('21. No fake straight-line route is ever labeled as a road route', async () => {
+      RouteService.setMockRoutingHandler(async () => {
+        return { code: 'NoRoute', message: 'No road route found' };
+      });
+
+      const circuit = await RouteService.getRoadRouteCircuit(
+        sellerPlant.coordinates,
+        [buyerVadodara]
+      );
+
+      // Must be flagged as non-road approximation
+      expect(circuit.isRoadRoute).toBe(false);
+      expect(circuit.routeType).not.toBe('ROAD_NETWORK');
+      expect(circuit.routeStatus).toBe('ROAD_ROUTE_UNAVAILABLE');
+    });
+
+    it('22. Transportation cost calculation strictly uses the selected road route distance and duration', async () => {
+      const result = await OptimizerService.optimizeRoutes(
+        sellerPlant,
+        [buyerVadodara],
+        { capacityTonnes: 200 }
+      );
+
+      const rec = result.recommendedRoute;
+      const trip = rec.trips[0];
+
+      // Verify exact consistency:
+      // Fuel cost must be derived from the exact same road distance
+      const expectedFuelLitres = Math.round((rec.totalDistanceKm / 3.5) * 100) / 100;
+      const expectedFuelCost = Math.round(expectedFuelLitres * 92.5 * 100) / 100;
+      expect(rec.costBreakdown.fuelCost).toBe(expectedFuelCost);
+
+      // Vehicle operating cost = distanceKm * 14
+      const expectedOperating = Math.round(rec.totalDistanceKm * 14 * 100) / 100;
+      expect(rec.costBreakdown.vehicleOperatingCost).toBe(expectedOperating);
+
+      // Toll cost = distanceKm * 2.4
+      const expectedToll = Math.round(rec.totalDistanceKm * 2.4 * 100) / 100;
+      expect(rec.costBreakdown.tollCost).toBe(expectedToll);
+
+      // Trip distance must equal candidate total distance
+      expect(trip.totalDistanceKm).toBe(rec.totalDistanceKm);
+      expect(trip.totalDurationHours).toBe(rec.totalDurationHours);
+    });
+
+    it('23. Route alternatives each have their own road geometry and metrics', async () => {
+      const result = await OptimizerService.optimizeRoutes(
+        sellerPlant,
+        [buyerVadodara, buyerRajkot, buyerSurat],
+        { capacityTonnes: 400 }
+      );
+
+      expect(result.alternatives.length).toBeGreaterThanOrEqual(1);
+      for (const alt of result.alternatives) {
+        expect(alt.geometry).toBeDefined();
+        expect(alt.geometry.length).toBeGreaterThan(100);
+        expect(alt.isRoadRoute).toBe(true);
+        expect(alt.totalDistanceKm).toBeGreaterThan(0);
+        expect(alt.costBreakdown.totalEstimatedCost).toBeGreaterThan(0);
+      }
     });
   });
 });

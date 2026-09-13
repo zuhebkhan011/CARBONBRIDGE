@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { logisticsApi } from '../../api/logistics';
+import './Logistics.css';
 
 const DEMO_SCENARIO_STOPS = [
   {
@@ -57,15 +58,9 @@ export function Logistics() {
         const shipments = res?.data?.shipments || [];
         setActiveShipments(shipments);
 
-        // If seller has at least 1 active shipment, optimize live shipments;
-        // Otherwise default to the 3-buyer demo scenario for immediate demonstration
-        if (shipments.length >= 1) {
-          setUseScenario(false);
-          await runOptimization(false, 200);
-        } else {
-          setUseScenario(true);
-          await runOptimization(true, 200);
-        }
+        // Default to the 3-buyer demo corridor (350T) for immediate multi-trip capacity demonstration
+        setUseScenario(true);
+        await runOptimization(true, 200);
       } catch (err) {
         console.error('Failed to load active shipments. Falling back to demo corridor:', err);
         setUseScenario(true);
@@ -184,7 +179,7 @@ export function Logistics() {
       candidate.trips.forEach((trip, tIdx) => {
         const color = tripColors[tIdx % tripColors.length];
 
-        // Draw delivery drop pins
+        // Draw delivery drop pins (1, 2, 3...)
         trip.stops.forEach((stop, sIdx) => {
           const stopIcon = L.divIcon({
             className: 'custom-map-pin stop-pin',
@@ -207,12 +202,21 @@ export function Logistics() {
 
         // Draw Route Geometry
         if (trip.geometry && trip.geometry.length > 0) {
+          const isRoad = trip.isRoadRoute !== false && candidate.isRoadRoute !== false;
           L.polyline(trip.geometry, {
-            color,
-            weight: 4,
-            opacity: 0.85,
+            color: isRoad ? color : '#b45309',
+            weight: isRoad ? 5 : 3,
+            opacity: isRoad ? 0.9 : 0.75,
+            dashArray: isRoad ? null : '6, 8',
             lineJoin: 'round',
+            lineCap: 'round',
           }).addTo(layerGroup);
+
+          // Sample road geometry points into bounds for accurate viewport framing
+          const step = Math.max(1, Math.floor(trip.geometry.length / 30));
+          for (let i = 0; i < trip.geometry.length; i += step) {
+            bounds.push(trip.geometry[i]);
+          }
         }
       });
 
@@ -224,28 +228,61 @@ export function Logistics() {
     });
   }, [optimization, selectedRouteId]);
 
+  // Handle container resize to ensure Leaflet recomputes its viewport
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    });
+    ro.observe(mapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   const recommended = optimization?.recommendedRoute;
   const activeCandidate =
     optimization?.alternatives?.find((a) => a.routeId === selectedRouteId) || recommended;
 
+  // Single Source of Truth for economic comparison
+  const candidateToCompare = activeCandidate || recommended;
+  const baselineCost = optimization?.baselineComparison?.independentTotalCost ?? 0;
+  const baselineDistance = optimization?.baselineComparison?.independentDistanceKm ?? 0;
+  const baselineTripsCount = optimization?.baselineComparison?.independentTripsCount ?? 1;
+  const candidateCost = candidateToCompare?.costBreakdown?.totalEstimatedCost ?? optimization?.baselineComparison?.consolidatedTotalCost ?? 0;
+  const candidateDistance = candidateToCompare?.totalDistanceKm ?? optimization?.baselineComparison?.consolidatedDistanceKm ?? 0;
+  const candidateTripsCount = candidateToCompare?.trips?.length ?? optimization?.baselineComparison?.consolidatedTripsCount ?? 1;
+  const savingsAmount = Math.max(0, Math.round((baselineCost - candidateCost) * 100) / 100);
+  const savingsPct = baselineCost > 0 ? Math.round((savingsAmount / baselineCost) * 10000) / 100 : 0;
+  const distanceSavedKm = Math.max(0, Math.round((baselineDistance - candidateDistance) * 100) / 100);
+
   return (
-    <div className="page-enter">
+    <div className="logistics-page page-enter">
       {/* Page Header */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <h2>Smart Transportation Cost Optimizer</h2>
+      <div className="logistics-header">
+        <div className="logistics-header-info">
+          <div className="logistics-header-title-row">
+            <h2 className="logistics-header-title">Smart Transportation Cost Optimizer</h2>
             <span className="badge badge-primary">Logistics Intelligence</span>
+            {useScenario ? (
+              <span className="badge" style={{ backgroundColor: 'rgba(2, 132, 199, 0.12)', color: '#0284C7', border: '1px solid rgba(2, 132, 199, 0.3)', fontSize: '11px', fontWeight: 600 }}>
+                ✨ 3-Buyer Regional Corridor (350T Demo)
+              </span>
+            ) : (
+              <span className="badge" style={{ backgroundColor: 'rgba(100, 116, 139, 0.12)', color: '#64748b', border: '1px solid rgba(100, 116, 139, 0.3)', fontSize: '11px', fontWeight: 600 }}>
+                📁 Live Dispatches ({activeShipments.length})
+              </span>
+            )}
           </div>
-          <p style={{ color: 'var(--color-text-muted)', marginTop: 'var(--space-1)', fontSize: 'var(--text-sm)' }}>
+          <p className="logistics-header-subtitle">
             Determines the lowest-cost delivery route sequence respecting cryogenic vehicle payload limits, travel durations, and commercial tolls.
           </p>
         </div>
 
         {/* Top Controls */}
-        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-muted)' }}>TANKER CAPACITY:</span>
+        <div className="logistics-header-controls">
+          <div className="logistics-capacity-group">
+            <span className="logistics-capacity-label">TANKER CAPACITY:</span>
             <select
               value={vehicleCapacity}
               onChange={(e) => {
@@ -253,8 +290,7 @@ export function Logistics() {
                 setVehicleCapacity(val);
                 runOptimization(useScenario, val);
               }}
-              className="form-input"
-              style={{ width: '130px', padding: '6px 10px', fontSize: 'var(--text-sm)' }}
+              className="form-input logistics-capacity-select"
             >
               <option value={150}>150 Tonnes</option>
               <option value={200}>200 Tonnes (Std)</option>
@@ -272,7 +308,9 @@ export function Logistics() {
               runOptimization(nextMode, vehicleCapacity);
             }}
           >
-            {useScenario ? '📁 View Database Shipments' : '✨ Test 3-Buyer Corridor (350T)'}
+            {useScenario
+              ? `📁 View Live Dispatches (${activeShipments.length})`
+              : '✨ Test 3-Buyer Corridor (350T)'}
           </button>
 
           <button
@@ -311,20 +349,31 @@ export function Logistics() {
       ) : (
         <>
           {/* Main 2-Column Responsive Layout */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)', gap: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+          <div className="logistics-main-grid">
             {/* Left Column: Interactive Map & Stops */}
-            <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: 'var(--space-4) var(--space-5)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontSize: 'var(--text-base)', margin: 0 }}>
-                    {activeCandidate?.name || 'Recommended Delivery Itinerary'}
-                  </h3>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            <div className="card logistics-map-card">
+              <div className="logistics-map-header">
+                <div className="logistics-map-header-title-block">
+                  <div className="logistics-map-header-title-row">
+                    <h3 className="logistics-map-header-title">
+                      {activeCandidate?.name || 'Recommended Delivery Itinerary'}
+                    </h3>
+                    {activeCandidate?.isRoadRoute !== false ? (
+                      <span className="badge" style={{ backgroundColor: 'rgba(5, 150, 105, 0.12)', color: '#059669', fontWeight: 600, border: '1px solid rgba(5, 150, 105, 0.3)', fontSize: '11px' }}>
+                        ✓ Road Network Route · OSRM
+                      </span>
+                    ) : (
+                      <span className="badge" style={{ backgroundColor: 'rgba(217, 119, 6, 0.15)', color: '#d97706', fontWeight: 600, border: '1px solid rgba(217, 119, 6, 0.3)', fontSize: '11px' }}>
+                        ⚠️ Road route unavailable — approximate visualization
+                      </span>
+                    )}
+                  </div>
+                  <span className="logistics-map-header-subtitle">
                     Origin: {optimization.sellerPlant?.name} • {optimization.activeShipmentsCount} Drops • {optimization.totalDeliveredQuantityTonnes} T Total
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <div className="logistics-map-trips-badges">
                   {activeCandidate?.trips?.map((trip, idx) => (
                     <span
                       key={idx}
@@ -341,26 +390,34 @@ export function Logistics() {
                 </div>
               </div>
 
+              {/* Warning Banner if Road Route is Unavailable */}
+              {activeCandidate?.isRoadRoute === false && (
+                <div className="logistics-map-warning-banner">
+                  <span>⚠️</span>
+                  <span><strong>Notice:</strong> Road route unavailable — approximate visualization. Drivable road geometry could not be retrieved; straight lines shown are approximate.</span>
+                </div>
+              )}
+
               {/* Map Container */}
-              <div ref={mapRef} style={{ height: '460px', width: '100%' }} />
+              <div ref={mapRef} className="logistics-map-container" />
 
               {/* Sequence Footer */}
-              <div style={{ padding: 'var(--space-4) var(--space-5)', backgroundColor: 'var(--color-bg-subtle)', borderTop: '1px solid var(--color-border)', fontSize: 'var(--text-xs)' }}>
+              <div className="logistics-map-footer">
                 <strong>Itinerary: </strong>
                 {activeCandidate?.trips?.[0]?.routeSequence?.join(' ➔ ') || 'Origin ➔ Deliveries ➔ Return'}
               </div>
             </div>
 
             {/* Right Column: Economics & Lowest Cost Breakdown */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+            <div className="logistics-details-column">
               {/* Recommended Route Card */}
-              <div className="card" style={{ borderLeft: '4px solid var(--color-success)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-3)' }}>
+              <div className="card logistics-route-card">
+                <div className="logistics-route-card-header">
                   <div>
                     <span className="badge badge-success" style={{ marginBottom: 'var(--space-2)', display: 'inline-block' }}>
                       🟢 {activeCandidate?.isRecommended ? 'RECOMMENDED ROUTE — LOWEST ESTIMATED COST' : 'ALTERNATIVE ROUTE'}
                     </span>
-                    <h3 style={{ fontSize: 'var(--text-xl)', margin: 0 }}>{activeCandidate?.name}</h3>
+                    <h3 className="logistics-route-title">{activeCandidate?.name}</h3>
                   </div>
 
                   <button
@@ -371,103 +428,112 @@ export function Logistics() {
                   </button>
                 </div>
 
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+                <p className="logistics-route-desc">
                   {activeCandidate?.whyRecommended}
                 </p>
 
                 {/* Key Metric Highlights */}
-                <div className="grid grid-3 dashboard-metrics" style={{ marginBottom: 'var(--space-4)' }}>
-                  <div className="metric-card">
-                    <div className="metric-label">Total Logistics Cost</div>
-                    <div className="metric-value" style={{ color: 'var(--color-success)', fontSize: 'var(--text-2xl)' }}>
+                <div className="logistics-metrics-grid">
+                  <div className="logistics-metric-card">
+                    <div className="logistics-metric-label">Total Logistics Cost</div>
+                    <div className="logistics-metric-value" style={{ color: 'var(--color-success)' }}>
                       ₹{activeCandidate?.costBreakdown?.totalEstimatedCost?.toLocaleString('en-IN') || '—'}
                     </div>
                   </div>
 
-                  <div className="metric-card">
-                    <div className="metric-label">Logistics Cost / Tonne</div>
-                    <div className="metric-value" style={{ fontSize: 'var(--text-2xl)' }}>
-                      ₹{activeCandidate?.costBreakdown?.costPerTonne?.toFixed(1) || '—'} <span className="metric-sub">/T</span>
+                  <div className="logistics-metric-card">
+                    <div className="logistics-metric-label">Cost / Tonne</div>
+                    <div className="logistics-metric-value">
+                      ₹{activeCandidate?.costBreakdown?.costPerTonne?.toFixed(2) || '—'} <span className="logistics-metric-sub">/T</span>
                     </div>
                   </div>
 
-                  <div className="metric-card">
-                    <div className="metric-label">Estimated Landed Cost</div>
-                    <div className="metric-value" style={{ color: 'var(--color-primary)', fontSize: 'var(--text-2xl)' }}>
-                      ₹{activeCandidate?.landedCost?.landedCostPerTonne?.toFixed(1) || '—'} <span className="metric-sub">/T</span>
+                  <div className="logistics-metric-card">
+                    <div className="logistics-metric-label">Landed Cost</div>
+                    <div className="logistics-metric-value" style={{ color: 'var(--color-primary)' }}>
+                      ₹{activeCandidate?.landedCost?.landedCostPerTonne?.toFixed(2) || '—'} <span className="logistics-metric-sub">/T</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Road & Duration Details */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', padding: 'var(--space-3)', backgroundColor: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)' }}>
-                  <div>
+                <div className="logistics-quick-stats">
+                  <div className="logistics-stat-item">
                     <span style={{ color: 'var(--color-text-muted)' }}>Total Distance:</span>
-                    <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginTop: '2px' }}>
+                    <div className="logistics-stat-val">
                       {activeCandidate?.totalDistanceKm} km
                     </div>
                   </div>
-                  <div>
+                  <div className="logistics-stat-item">
                     <span style={{ color: 'var(--color-text-muted)' }}>Travel Time:</span>
-                    <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginTop: '2px' }}>
+                    <div className="logistics-stat-val">
                       {Math.floor(activeCandidate?.totalDurationHours || 0)}h {Math.round(((activeCandidate?.totalDurationHours || 0) % 1) * 60)}m
                     </div>
                   </div>
-                  <div>
+                  <div className="logistics-stat-item">
                     <span style={{ color: 'var(--color-text-muted)' }}>Estimated Toll:</span>
-                    <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginTop: '2px' }}>
+                    <div className="logistics-stat-val">
                       ₹{activeCandidate?.costBreakdown?.tollCost?.toLocaleString('en-IN')}
                     </div>
+                    <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', display: 'block', lineHeight: 1.1 }}>
+                      Configured model rate
+                    </span>
                   </div>
                 </div>
 
-                {/* Traffic disclosure badge */}
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <span>ℹ️</span>
-                  <span>{optimization.trafficDisclosure}</span>
+                {/* Traffic and Toll disclosure badges */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-2)' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span>ℹ️</span>
+                    <span>{optimization.trafficDisclosure}</span>
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span>ℹ️</span>
+                    <span>Estimated Toll — based on configured assumptions. Actual live toll data unavailable.</span>
+                  </div>
                 </div>
               </div>
 
               {/* Cost Component Breakdown */}
-              <div className="card">
-                <h4 style={{ fontSize: 'var(--text-sm)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+              <div className="card logistics-cost-card">
+                <h4 className="logistics-cost-card-title">
                   Transparent Cost Breakdown
                 </h4>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', fontSize: 'var(--text-sm)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Fuel Cost ({activeCandidate?.costBreakdown?.fuelLitres} L @ ₹92.5/L):</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.fuelCost?.toLocaleString('en-IN')}</strong>
+                <div className="logistics-cost-list">
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Fuel Cost ({activeCandidate?.costBreakdown?.fuelLitres} L @ ₹92.5/L):</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.fuelCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Vehicle Operating & Maintenance ({activeCandidate?.totalDistanceKm} km @ ₹14/km):</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.vehicleOperatingCost?.toLocaleString('en-IN')}</strong>
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Vehicle Operating & Maintenance ({activeCandidate?.totalDistanceKm} km @ ₹14/km):</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.vehicleOperatingCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Driver & Certified Hazmat Crew ({activeCandidate?.totalDurationHours} hrs @ ₹250/h):</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.driverCost?.toLocaleString('en-IN')}</strong>
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Driver & Certified Hazmat Crew ({activeCandidate?.totalDurationHours} hrs @ ₹250/h):</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.driverCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Commercial Highway Tolls (Estimated ₹2.40/km):</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.tollCost?.toLocaleString('en-IN')}</strong>
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Commercial Highway Tolls (Estimated Toll — based on configured assumptions):</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.tollCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Cryogenic Loading & Depressurization Check:</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.loadingCost?.toLocaleString('en-IN')}</strong>
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Cryogenic Loading & Depressurization Check:</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.loadingCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
-                    <span>Customer Offload & Thermal Manifold Connection:</span>
-                    <strong>₹{activeCandidate?.costBreakdown?.unloadingCost?.toLocaleString('en-IN')}</strong>
+                  <div className="logistics-cost-row">
+                    <span className="logistics-cost-label">Customer Offload & Thermal Manifold Connection:</span>
+                    <strong className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.unloadingCost?.toLocaleString('en-IN')}</strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 'var(--space-2)', fontWeight: 800, fontSize: 'var(--text-base)', color: 'var(--color-success)' }}>
-                    <span>Total Estimated Logistics Cost:</span>
-                    <span>₹{activeCandidate?.costBreakdown?.totalEstimatedCost?.toLocaleString('en-IN')}</span>
+                  <div className="logistics-cost-row-total">
+                    <span className="logistics-cost-label">Total Estimated Logistics Cost:</span>
+                    <span className="logistics-cost-val">₹{activeCandidate?.costBreakdown?.totalEstimatedCost?.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>
@@ -476,49 +542,49 @@ export function Logistics() {
 
           {/* Baseline vs. Consolidated Comparison */}
           {optimization.baselineComparison?.isGenuinelyCalculated && (
-            <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+            <div className="card logistics-comparison-card">
               <h3 style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-3)' }}>
                 Economic Advantage: Independent Dispatches vs. Consolidated Routing
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1.2fr', gap: 'var(--space-4)', alignItems: 'center' }}>
-                <div style={{ padding: 'var(--space-4)', backgroundColor: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
+              <div className="logistics-comparison-grid">
+                <div style={{ padding: 'var(--space-4)', backgroundColor: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-md)', textAlign: 'center', minWidth: 0 }}>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
                     Without Consolidation
                   </div>
-                  <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-                    ₹{optimization.baselineComparison.independentTotalCost?.toLocaleString('en-IN')}
+                  <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--color-text-muted)', wordBreak: 'break-word' }}>
+                    ₹{baselineCost.toLocaleString('en-IN')}
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                    {optimization.baselineComparison.independentTripsCount} separate round-trips ({optimization.baselineComparison.independentDistanceKm} km)
+                    {baselineTripsCount} separate round-trip{baselineTripsCount === 1 ? '' : 's'} ({baselineDistance} km total)
                   </div>
                 </div>
 
-                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--color-text-muted)' }}>➔</div>
+                <div className="logistics-comparison-arrow">➔</div>
 
-                <div style={{ padding: 'var(--space-4)', backgroundColor: 'var(--color-primary-light)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
+                <div style={{ padding: 'var(--space-4)', backgroundColor: 'var(--color-primary-light)', borderRadius: 'var(--radius-md)', textAlign: 'center', minWidth: 0 }}>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-primary)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '4px' }}>
                     With Smart Consolidation
                   </div>
-                  <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--color-primary)' }}>
-                    ₹{optimization.baselineComparison.consolidatedTotalCost?.toLocaleString('en-IN')}
+                  <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--color-primary)', wordBreak: 'break-word' }}>
+                    ₹{candidateCost.toLocaleString('en-IN')}
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-primary)', marginTop: '4px' }}>
-                    Optimized bundled circuit ({recommended?.totalDistanceKm} km)
+                    {candidateTripsCount} optimized trip{candidateTripsCount === 1 ? '' : 's'} ({candidateDistance} km total)
                   </div>
                 </div>
 
-                <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--color-text-muted)' }}>=</div>
+                <div className="logistics-comparison-arrow">=</div>
 
-                <div style={{ padding: 'var(--space-4)', backgroundColor: 'rgba(45, 106, 79, 0.1)', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
+                <div style={{ padding: 'var(--space-4)', backgroundColor: 'rgba(45, 106, 79, 0.1)', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)', textAlign: 'center', minWidth: 0 }}>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
                     Genuinely Calculated Savings
                   </div>
-                  <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 900, color: 'var(--color-success)' }}>
-                    ₹{optimization.baselineComparison.savingsAmount?.toLocaleString('en-IN')}
+                  <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 900, color: 'var(--color-success)', wordBreak: 'break-word' }}>
+                    ₹{savingsAmount.toLocaleString('en-IN')}
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)', fontWeight: 600, marginTop: '4px' }}>
-                    {optimization.baselineComparison.savingsPercentage}% cost reduction ({optimization.baselineComparison.distanceSavedKm} km saved)
+                    {savingsPct}% cost reduction ({distanceSavedKm} km saved)
                   </div>
                 </div>
               </div>
@@ -527,7 +593,7 @@ export function Logistics() {
 
           {/* Multi-Trip Plan (when total demand > vehicle capacity) */}
           {optimization.requiresMultipleTrips && (
-            <div className="card" style={{ marginBottom: 'var(--space-6)', borderLeft: '4px solid #0284C7' }}>
+            <div className="card logistics-trips-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
                 <div>
                   <h3 style={{ fontSize: 'var(--text-base)', margin: 0 }}>
@@ -539,9 +605,9 @@ export function Logistics() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${activeCandidate?.trips?.length || 1}, 1fr)`, gap: 'var(--space-4)' }}>
+              <div className="logistics-trips-grid">
                 {activeCandidate?.trips?.map((trip, tIdx) => (
-                  <div key={tIdx} style={{ padding: 'var(--space-3)', backgroundColor: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                  <div key={tIdx} style={{ padding: 'var(--space-3)', backgroundColor: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
                       <strong style={{ fontSize: 'var(--text-sm)', color: '#0284C7' }}>Trip {trip.tripNumber}</strong>
                       <span className="badge badge-primary">{trip.allocatedTonnage}T Payload</span>
@@ -568,12 +634,12 @@ export function Logistics() {
 
           {/* Alternative Routes Comparison */}
           {optimization.alternatives && optimization.alternatives.length > 0 && (
-            <div className="card">
+            <div className="card logistics-alternatives-card">
               <h3 style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-3)' }}>
                 Feasible Route Alternatives & Trade-Offs
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${1 + optimization.alternatives.length}, 1fr)`, gap: 'var(--space-4)' }}>
+              <div className="logistics-alternatives-grid">
                 {/* Recommended Card */}
                 <div
                   style={{
@@ -582,6 +648,7 @@ export function Logistics() {
                     border: selectedRouteId === recommended?.routeId ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
                     backgroundColor: selectedRouteId === recommended?.routeId ? 'rgba(45, 106, 79, 0.05)' : '#fff',
                     cursor: 'pointer',
+                    minWidth: 0,
                   }}
                   onClick={() => setSelectedRouteId(recommended?.routeId)}
                 >
@@ -613,6 +680,7 @@ export function Logistics() {
                       border: selectedRouteId === alt.routeId ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                       backgroundColor: selectedRouteId === alt.routeId ? 'var(--color-primary-light)' : '#fff',
                       cursor: 'pointer',
+                      minWidth: 0,
                     }}
                     onClick={() => setSelectedRouteId(alt.routeId)}
                   >

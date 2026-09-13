@@ -58,6 +58,11 @@ export interface RouteLeg {
   durationHours: number;
   trafficStatus: string;
   tollEstimate: number;
+  geometry?: [number, number][];
+  geoJsonGeometry?: {
+    type: 'LineString';
+    coordinates: [number, number][];
+  };
 }
 
 export interface TripPlan {
@@ -72,6 +77,14 @@ export interface TripPlan {
   landedCost: LandedCost;
   routeSequence: string[];
   geometry: [number, number][];
+  geoJsonGeometry?: {
+    type: 'LineString';
+    coordinates: [number, number][];
+  };
+  isRoadRoute: boolean;
+  routeType: 'ROAD_NETWORK' | 'STRAIGHT_LINE_APPROXIMATION';
+  routeStatus: 'OPTIMAL_ROAD_ROUTE' | 'ROAD_ROUTE_UNAVAILABLE';
+  routingProvider: 'OSRM' | 'FALLBACK_DIRECT';
 }
 
 export interface RouteCandidate {
@@ -93,6 +106,15 @@ export interface RouteCandidate {
     deadlinesSatisfied: boolean;
     allStopsIncluded: boolean;
   };
+  geometry: [number, number][];
+  geoJsonGeometry?: {
+    type: 'LineString';
+    coordinates: [number, number][];
+  };
+  isRoadRoute: boolean;
+  routeType: 'ROAD_NETWORK' | 'STRAIGHT_LINE_APPROXIMATION';
+  routeStatus: 'OPTIMAL_ROAD_ROUTE' | 'ROAD_ROUTE_UNAVAILABLE';
+  routingProvider: 'OSRM' | 'FALLBACK_DIRECT';
 }
 
 export interface BaselineComparison {
@@ -101,6 +123,9 @@ export interface BaselineComparison {
   independentHours: number;
   independentTotalCost: number;
   independentCostPerTonne: number;
+  consolidatedTripsCount: number;
+  consolidatedDistanceKm: number;
+  consolidatedHours: number;
   consolidatedTotalCost: number;
   consolidatedCostPerTonne: number;
   savingsAmount: number;

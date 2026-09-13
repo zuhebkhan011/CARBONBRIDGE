@@ -16,7 +16,7 @@ export class OptimizerService {
   /**
    * Optimizes transportation delivery routes for a single seller to one or multiple buyers
    */
-  public static optimizeRoutes(
+  public static async optimizeRoutes(
     sellerPlant: {
       id: string;
       name: string;
@@ -25,7 +25,7 @@ export class OptimizerService {
     },
     stops: DeliveryStop[],
     vehicleConfigOverride?: Partial<VehicleConfig>
-  ): OptimizationResult {
+  ): Promise<OptimizationResult> {
     const vehicleConfig = CostService.resolveVehicleConfig(vehicleConfigOverride);
     const totalDeliveredQuantityTonnes = stops.reduce(
       (acc, s) => acc + s.quantityTonnes,
@@ -54,6 +54,15 @@ export class OptimizerService {
           deadlinesSatisfied: true,
           allStopsIncluded: true,
         },
+        geometry: [[sellerPlant.coordinates.latitude, sellerPlant.coordinates.longitude]],
+        geoJsonGeometry: {
+          type: 'LineString',
+          coordinates: [[sellerPlant.coordinates.longitude, sellerPlant.coordinates.latitude]],
+        },
+        isRoadRoute: true,
+        routeType: 'ROAD_NETWORK',
+        routeStatus: 'OPTIMAL_ROAD_ROUTE',
+        routingProvider: 'OSRM',
       };
 
       return {
@@ -82,31 +91,56 @@ export class OptimizerService {
     const requiresMultipleTrips = tripBuckets.length > 1;
 
     // Build candidate route plans across all trips
-    const { recommendedRoute, alternatives } = this.evaluateRouteCandidates(
+    const { recommendedRoute, alternatives } = await this.evaluateRouteCandidates(
       sellerPlant,
       tripBuckets,
       vehicleConfig
     );
 
     // Baseline calculation: Sum of independent round trips from Seller to each individual buyer
-    const independentTrips = stops.map((stop) => {
-      const legTo = RouteService.getRoadDistanceKm(sellerPlant.coordinates, stop.coordinates);
-      const roundTripKm = Math.round(legTo * 2 * 100) / 100;
-      const durationHours =
-        Math.round(
-          (roundTripKm / vehicleConfig.averageSpeedKmH + 1.0) * 10
-        ) / 10;
-      return {
-        distanceKm: roundTripKm,
-        durationHours,
-        quantityTonnes: stop.quantityTonnes,
-      };
-    });
+    // "Without consolidation" means independent dispatches respecting vehicle capacity
+    const independentTrips: { distanceKm: number; durationHours: number; quantityTonnes: number }[] = [];
+
+    for (const stop of stops) {
+      // Determine how many independent round trips are required for this stop's payload
+      const tripsNeeded = Math.max(1, Math.ceil(stop.quantityTonnes / vehicleConfig.capacityTonnes));
+
+      let roundTripKm = 0;
+      let roundTripHours = 0;
+
+      // If there is only 1 stop and 1 trip, independent baseline is identical to the single trip
+      if (stops.length === 1 && tripsNeeded === 1 && recommendedRoute.trips[0]) {
+        roundTripKm = recommendedRoute.trips[0].totalDistanceKm;
+        roundTripHours = recommendedRoute.trips[0].totalDurationHours;
+      } else {
+        // Query authentic road circuit for Seller -> Stop -> Seller
+        const circuit = await RouteService.getRoadRouteCircuit(
+          sellerPlant.coordinates,
+          [stop],
+          vehicleConfig.averageSpeedKmH,
+          vehicleConfig.tollRatePerKm
+        );
+        roundTripKm = circuit.totalDistanceKm;
+        roundTripHours = circuit.totalDurationHours;
+      }
+
+      let remainingTonnage = stop.quantityTonnes;
+      for (let t = 0; t < tripsNeeded; t++) {
+        const tripPayload = Math.min(remainingTonnage, vehicleConfig.capacityTonnes);
+        independentTrips.push({
+          distanceKm: roundTripKm,
+          durationHours: roundTripHours,
+          quantityTonnes: tripPayload,
+        });
+        remainingTonnage -= tripPayload;
+      }
+    }
 
     const baselineComparison = CostService.calculateBaselineComparison(
       independentTrips,
       recommendedRoute.costBreakdown,
-      vehicleConfig
+      vehicleConfig,
+      recommendedRoute.trips.length
     );
 
     return {
@@ -187,11 +221,11 @@ export class OptimizerService {
   /**
    * Evaluates delivery sequences for each trip and produces recommended route + alternatives
    */
-  private static evaluateRouteCandidates(
+  private static async evaluateRouteCandidates(
     sellerPlant: { id: string; name: string; address: string; coordinates: GeoCoordinate },
     tripBuckets: DeliveryStop[][],
     vehicleConfig: Required<VehicleConfig>
-  ): { recommendedRoute: RouteCandidate; alternatives: RouteCandidate[] } {
+  ): Promise<{ recommendedRoute: RouteCandidate; alternatives: RouteCandidate[] }> {
     // Generate trip alternatives:
     // Strategy 1: Lowest estimated total logistics cost
     // Strategy 2: Shortest overall distance
@@ -225,7 +259,7 @@ export class OptimizerService {
           vehicleConfig
         );
 
-        const tripPlan = this.buildTripPlan(
+        const tripPlan = await this.buildTripPlan(
           sellerPlant,
           orderedStops,
           tripNumber,
@@ -251,12 +285,9 @@ export class OptimizerService {
       candidateTotalDistance = Math.round(candidateTotalDistance * 100) / 100;
       candidateTotalDuration = Math.round(candidateTotalDuration * 10) / 10;
 
-      const totalCostBreakdown = CostService.calculateTripCost(
-        candidateTotalDistance,
-        candidateTotalDuration,
-        candidateTotalQuantity,
-        trips.reduce((acc, t) => acc + t.stops.length, 0),
-        vehicleConfig
+      const totalCostBreakdown = CostService.aggregateTripCostBreakdowns(
+        trips,
+        candidateTotalQuantity
       );
 
       const avgCo2Price = this.computeAverageCo2Price(tripBuckets.flat());
@@ -290,6 +321,16 @@ export class OptimizerService {
           deadlinesSatisfied: allDeadlinesSatisfied,
           allStopsIncluded: true,
         },
+        geometry: trips[0]?.geometry || [],
+        geoJsonGeometry: trips[0]?.geoJsonGeometry,
+        isRoadRoute: trips.every((t) => t.isRoadRoute),
+        routeType: trips.every((t) => t.isRoadRoute)
+          ? 'ROAD_NETWORK'
+          : 'STRAIGHT_LINE_APPROXIMATION',
+        routeStatus: trips.every((t) => t.isRoadRoute)
+          ? 'OPTIMAL_ROAD_ROUTE'
+          : 'ROAD_ROUTE_UNAVAILABLE',
+        routingProvider: trips.every((t) => t.isRoadRoute) ? 'OSRM' : 'FALLBACK_DIRECT',
       });
     }
 
@@ -500,77 +541,33 @@ export class OptimizerService {
   /**
    * Builds detailed trip plan including route legs, geometry, cost breakdown, and landed cost
    */
-  private static buildTripPlan(
+  private static async buildTripPlan(
     sellerPlant: { id: string; name: string; address: string; coordinates: GeoCoordinate },
     stops: DeliveryStop[],
     tripNumber: number,
     vehicleConfig: Required<VehicleConfig>
-  ): TripPlan {
-    const legs: RouteLeg[] = [];
-    const geometry: [number, number][] = [];
-    let totalDistanceKm = 0;
-    let totalDurationHours = 0;
-
-    let currentCoord = sellerPlant.coordinates;
-    let currentName = `${sellerPlant.name} (Origin Depot)`;
-    geometry.push([currentCoord.latitude, currentCoord.longitude]);
-
-    const routeSequence: string[] = [`Origin: ${sellerPlant.name} (Depot)`];
-
-    // Outbound drops
-    for (let i = 0; i < stops.length; i++) {
-      const stop = stops[i];
-      const leg = RouteService.getRouteLeg(
-        currentName,
-        stop.buyerName,
-        currentCoord,
-        stop.coordinates,
-        vehicleConfig.averageSpeedKmH,
-        vehicleConfig.tollRatePerKm
-      );
-
-      legs.push(leg);
-      totalDistanceKm += leg.distanceKm;
-      // Leg duration + 1.0 hour offload handling
-      totalDurationHours += leg.durationHours + 1.0;
-
-      for (const pt of leg.geometry) {
-        geometry.push(pt);
-      }
-
-      routeSequence.push(`Stop ${i + 1}: ${stop.buyerName} (${stop.quantityTonnes} T CO₂)`);
-      currentCoord = stop.coordinates;
-      currentName = stop.buyerName;
-    }
-
-    // Inbound return leg to Origin Depot
-    const returnLeg = RouteService.getRouteLeg(
-      currentName,
-      `${sellerPlant.name} (Return Depot)`,
-      currentCoord,
+  ): Promise<TripPlan> {
+    const circuit = await RouteService.getRoadRouteCircuit(
       sellerPlant.coordinates,
+      stops,
       vehicleConfig.averageSpeedKmH,
       vehicleConfig.tollRatePerKm
     );
-    legs.push(returnLeg);
-    totalDistanceKm += returnLeg.distanceKm;
-    totalDurationHours += returnLeg.durationHours;
 
-    for (const pt of returnLeg.geometry) {
-      geometry.push(pt);
+    const routeSequence: string[] = [`Origin: ${sellerPlant.name} (Depot)`];
+    for (let i = 0; i < stops.length; i++) {
+      routeSequence.push(`Stop ${i + 1}: ${stops[i].buyerName} (${stops[i].quantityTonnes} T CO₂)`);
     }
     routeSequence.push(`Return: ${sellerPlant.name} (Depot)`);
-
-    totalDistanceKm = Math.round(totalDistanceKm * 100) / 100;
-    totalDurationHours = Math.round(totalDurationHours * 10) / 10;
 
     const allocatedTonnage = Math.round(
       stops.reduce((acc, s) => acc + s.quantityTonnes, 0) * 100
     ) / 100;
 
+    // Ensure the EXACT SAME road-route distance and duration feed the cost breakdown
     const costBreakdown = CostService.calculateTripCost(
-      totalDistanceKm,
-      totalDurationHours,
+      circuit.totalDistanceKm,
+      circuit.totalDurationHours,
       allocatedTonnage,
       stops.length,
       vehicleConfig
@@ -588,13 +585,18 @@ export class OptimizerService {
       vehicleCapacityTonnes: vehicleConfig.capacityTonnes,
       allocatedTonnage,
       stops,
-      legs,
-      totalDistanceKm,
-      totalDurationHours,
+      legs: circuit.legs,
+      totalDistanceKm: circuit.totalDistanceKm,
+      totalDurationHours: circuit.totalDurationHours,
       costBreakdown,
       landedCost,
       routeSequence,
-      geometry,
+      geometry: circuit.geometry,
+      geoJsonGeometry: circuit.geoJsonGeometry,
+      isRoadRoute: circuit.isRoadRoute,
+      routeType: circuit.routeType,
+      routeStatus: circuit.routeStatus,
+      routingProvider: circuit.routingProvider,
     };
   }
 
@@ -686,6 +688,14 @@ export class OptimizerService {
       landedCost: CostService.calculateLandedCost(0, 0),
       routeSequence: [`Origin: ${sellerPlant.name}`],
       geometry: [[sellerPlant.coordinates.latitude, sellerPlant.coordinates.longitude]],
+      geoJsonGeometry: {
+        type: 'LineString',
+        coordinates: [[sellerPlant.coordinates.longitude, sellerPlant.coordinates.latitude]],
+      },
+      isRoadRoute: true,
+      routeType: 'ROAD_NETWORK',
+      routeStatus: 'OPTIMAL_ROAD_ROUTE',
+      routingProvider: 'OSRM',
     };
   }
 
